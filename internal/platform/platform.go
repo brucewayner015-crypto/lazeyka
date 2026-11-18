@@ -6,7 +6,12 @@ package platform
 import (
 	"encoding/binary"
 	"sort"
+
+	"lazeyka/internal/host"
 )
+
+// Host is the link to the Android app (nil elsewhere and until main connects).
+var Host *host.Conn
 
 // Scheduled task names.
 const (

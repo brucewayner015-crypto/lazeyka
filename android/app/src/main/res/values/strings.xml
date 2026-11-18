@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Лазейка</string>
+    <string name="tile_label">Лазейка</string>
+    <string name="import_file">Добавить в Лазейку</string>
+</resources>

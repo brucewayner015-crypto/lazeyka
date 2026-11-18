@@ -389,3 +389,56 @@ func TestExitListener(t *testing.T) {
 		t.Fatal("no lz-exit listener")
 	}
 }
+
+func TestBuildAndroid(t *testing.T) {
+	s := sampleSettings(t)
+	rt := testRuntime()
+	rt.Android, rt.TunEnabled, rt.TunFD, rt.DPIPort = true, true, 3, 18081
+	b, err := Build(s, rt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.Defaults[GYouTube] != PByeDPI || b.Defaults[GDiscord] != PByeDPI {
+		t.Fatalf("defaults %+v", b.Defaults)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(b.Config, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	tun := cfg["tun"].(map[string]any)
+	if tun["file-descriptor"].(float64) != 3 || tun["auto-route"] != false || tun["device"] != nil {
+		t.Fatalf("tun %v", tun)
+	}
+	if cfg["find-process-mode"] != "off" {
+		t.Fatal("process mode")
+	}
+	px := cfg["proxies"].([]any)[0].(map[string]any)
+	if px["name"] != PByeDPI || px["port"].(float64) != 18081 {
+		t.Fatalf("proxy %v", px)
+	}
+	joined := ""
+	for _, r := range cfg["rules"].([]any) {
+		joined += r.(string) + "\n"
+	}
+	if strings.Contains(joined, "PROCESS-") {
+		t.Fatalf("process rules on Android:\n%s", joined)
+	}
+	if !strings.Contains(joined, "AND,((NETWORK,UDP),(DST-PORT,443),(RULE-SET,youtube)),REJECT") {
+		t.Fatal("YouTube QUIC must be rejected so it goes through ByeDPI")
+	}
+	// ByeDPI not running: YouTube falls back to the VPN, ByeDPI stays selectable
+	rt.ZapretActive = false
+	b2, _ := Build(s, rt)
+	if b2.Defaults[GYouTube] != GAuto {
+		t.Fatalf("fallback %+v", b2.Defaults)
+	}
+	mihomoCheck(t, b)
+	// no servers: only ByeDPI and direct
+	empty := settings.Default()
+	empty.Normalize()
+	b3, err := Build(empty, rt)
+	if err != nil || b3.Defaults[GYouTube] != "DIRECT" {
+		t.Fatalf("empty: %v %+v", err, b3.Defaults)
+	}
+	mihomoCheck(t, b3)
+}

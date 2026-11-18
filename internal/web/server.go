@@ -159,6 +159,26 @@ func (s *Server) routes(mux *http.ServeMux) {
 		go func() { time.Sleep(200 * time.Millisecond); a.Quit() }()
 	})
 
+	// Android: apps that bypass the VPN
+	mux.HandleFunc("GET /api/android/apps", func(w http.ResponseWriter, r *http.Request) {
+		list, err := a.AndroidApps()
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"apps": list})
+	})
+	mux.HandleFunc("POST /api/android/bypass", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Packages []string `json:"packages"`
+		}
+		if err := readJSON(r, &req); err != nil {
+			writeErr(w, err)
+			return
+		}
+		ok(w, a.SetBypassApps(req.Packages))
+	})
+
 	mux.HandleFunc("GET /api/state", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, a.Status())
 	})

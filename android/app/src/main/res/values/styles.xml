@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Lazeyka" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:colorPrimary">#17312c</item>
+        <item name="android:colorPrimaryDark">#17312c</item>
+        <item name="android:colorAccent">#d98b1c</item>
+        <item name="android:statusBarColor">#17312c</item>
+        <item name="android:navigationBarColor">#e7edef</item>
+        <item name="android:windowBackground">@color/frost</item>
+    </style>
+</resources>

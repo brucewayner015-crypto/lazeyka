@@ -88,6 +88,19 @@ var DefaultHide = []string{"осталось", "истекает", "истёк",
 	"канал", "telegram", "телеграм", "support", "поддержк", "продл", "обнов", "подписк", "RU", "🇷🇺",
 	"росси", "russia", "москв", "moscow", "питер", "санкт"}
 
+// DefaultBypassApps: Russian banks and services that check for a VPN.
+var DefaultBypassApps = []string{
+	"ru.sberbankmobile",                     // СберБанк Онлайн
+	"com.idamob.tinkoff.android",            // Т-Банк
+	"ru.vtb24.mobilebanking.android",        // ВТБ Онлайн
+	"ru.alfabank.mobile.android",            // Альфа-Банк
+	"ru.gazprombank.android.mobilebank.app", // Газпромбанк
+	"ru.raiffeisennews",                     // Райффайзен Банк
+	"ru.nspk.mirpay",                        // Mir Pay
+	"ru.rostel",                             // Госуслуги
+	"ru.oneme.app",                          // MAX
+}
+
 // Routing modes.
 const (
 	ModeZapret = "zapret" // direct, zapret handles DPI
@@ -98,20 +111,23 @@ const (
 
 // Routing controls where each kind of traffic goes.
 type Routing struct {
-	YouTube       string   `json:"youtube"`    // zapret | vpn
-	Discord       string   `json:"discord"`    // zapret | vpn
-	Messengers    string   `json:"messengers"` // vpn | direct
-	AI            string   `json:"ai"`         // own | vpn
-	Other         string   `json:"other"`      // direct | vpn
-	HODCA         bool     `json:"hodca"`      // sites on Hetzner/OVH/DO/Cloudflare/AWS that break from RU
-	BlockQUIC     bool     `json:"block_quic"` // force TCP for blocked sites going through VPN
-	UDPDirect     bool     `json:"udp_direct"` // remaining UDP (games, calls) always direct
-	CustomVPN     []string `json:"custom_vpn"`
-	CustomDirect  []string `json:"custom_direct"`
-	DirectApps    []string `json:"direct_apps"`  // process names that always go direct (Russian apps)
-	DirectPaths   []string `json:"direct_paths"` // path fragments that always go direct
-	TorrentApps   []string `json:"torrent_apps"`
-	GameApps      []string `json:"game_apps"`
+	YouTube      string   `json:"youtube"`    // zapret | vpn
+	Discord      string   `json:"discord"`    // zapret | vpn
+	Messengers   string   `json:"messengers"` // vpn | direct
+	AI           string   `json:"ai"`         // own | vpn
+	Other        string   `json:"other"`      // direct | vpn
+	HODCA        bool     `json:"hodca"`      // sites on Hetzner/OVH/DO/Cloudflare/AWS that break from RU
+	BlockQUIC    bool     `json:"block_quic"` // force TCP for blocked sites going through VPN
+	UDPDirect    bool     `json:"udp_direct"` // remaining UDP (games, calls) always direct
+	CustomVPN    []string `json:"custom_vpn"`
+	CustomDirect []string `json:"custom_direct"`
+	DirectApps   []string `json:"direct_apps"`  // process names that always go direct (Russian apps)
+	DirectPaths  []string `json:"direct_paths"` // path fragments that always go direct
+	TorrentApps  []string `json:"torrent_apps"`
+	GameApps     []string `json:"game_apps"`
+	// Android: apps that bypass the VPN entirely (banks and services that
+	// refuse to work over a VPN). Package names.
+	BypassApps    []string `json:"bypass_apps"`
 	BlockedSelect string   `json:"blocked_select"` // manual choice for blocked traffic ("" = auto)
 	AISelect      string   `json:"ai_select"`
 }
@@ -203,6 +219,7 @@ func Default() *Settings {
 				"transmission-daemon.exe", "tixati.exe", "deluge.exe", "deluged.exe", "biglybt.exe",
 				"bitcomet.exe", "aria2c.exe", "motrix.exe", "picotorrent.exe", "fdm.exe",
 			},
+			BypassApps: append([]string{}, DefaultBypassApps...),
 			GameApps: []string{
 				"steam.exe", "steamwebhelper.exe", "steamservice.exe", "EpicGamesLauncher.exe",
 				"EpicWebHelper.exe", "Battle.net.exe", "RiotClientServices.exe", "RiotClientUx.exe",
@@ -282,6 +299,9 @@ func (s *Settings) Normalize() {
 	if r.GameApps == nil {
 		r.GameApps = d.Routing.GameApps
 	}
+	if r.BypassApps == nil {
+		r.BypassApps = d.Routing.BypassApps
+	}
 	z := &s.Zapret
 	if z.Strategy == "" {
 		z.Strategy = d.Zapret.Strategy
@@ -339,6 +359,7 @@ func Load(path string) (*Settings, error) {
 	// Start from defaults so new fields get sane values, but lists from the
 	// file replace defaults entirely.
 	s.Routing.DirectApps, s.Routing.DirectPaths, s.Routing.TorrentApps, s.Routing.GameApps = nil, nil, nil, nil
+	s.Routing.BypassApps = nil
 	s.Routing.CustomDirect = nil
 	if err := json.Unmarshal(b, s); err != nil {
 		// keep a copy of the broken file for diagnostics and start clean

@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,6 +123,8 @@ type App struct {
 	defender     DefenderView
 	defenderBusy bool
 	self         SelfUpdateView // the last check for a newer Лазейка
+	dpiPort      int            // Android: ByeDPI's SOCKS port
+	tunFile      *os.File       // Android: our copy of the VPN interface until mihomo has it
 
 	opMu          sync.Mutex // serialises connect/disconnect/zapret operations
 	mihomo        *core.Mihomo
@@ -164,6 +167,7 @@ func New(p Paths, dev bool) (*App, error) {
 	a.mihomo.OnExit = a.onMihomoExit
 	a.mihomo.OnLine = a.onMihomoLine
 	a.zr.OnExit = a.onZapretExit
+	a.initAndroid()
 	if err := settings.Save(p.Settings, s); err != nil {
 		logx.Warnf("не удалось сохранить настройки: %v", err)
 	}
@@ -208,7 +212,8 @@ func (a *App) Start(autostart bool) {
 				logx.Warnf("zapret: %v", err)
 			}
 		}
-		if s.App.AutoConnect && (len(s.Servers) > 0 || len(s.Subscriptions) > 0) {
+		// Android: ByeDPI alone needs the VPN interface too
+		if s.App.AutoConnect && (len(s.Servers) > 0 || len(s.Subscriptions) > 0 || (platform.IsAndroid && s.Zapret.Enabled)) {
 			if autostart {
 				// give the network a moment after logon
 				time.Sleep(3 * time.Second)
@@ -217,7 +222,7 @@ func (a *App) Start(autostart bool) {
 		}
 	}()
 	go a.watchNetwork()
-	if s.App.CheckUpdates {
+	if s.App.CheckUpdates && !platform.IsAndroid { // Android: engines come with the app
 		go func() {
 			time.Sleep(90 * time.Second)
 			a.CheckEngineUpdates(false)
@@ -240,6 +245,9 @@ func (a *App) Shutdown() {
 	defer a.opMu.Unlock()
 	a.stopTraffic()
 	a.mihomo.Stop()
+	if platform.IsAndroid {
+		a.releaseAndroidTun(true)
+	}
 	a.endNetFix("")
 	a.zr.Stop()
 	os.Remove(a.P.Instance)
@@ -320,12 +328,19 @@ func SignalInstance(p Paths, action string) error {
 func (a *App) hwid(salt string) core.HWID {
 	mid := platform.MachineID()
 	h := sha256.Sum256([]byte("lazeyka|" + mid + "|" + salt))
-	return core.HWID{
+	id := core.HWID{
 		ID:    hex.EncodeToString(h[:])[:32],
 		OS:    "Windows",
 		OSVer: platform.OSVersion(),
 		Model: "PC",
 	}
+	if platform.IsAndroid {
+		id.OS, id.OSVer, id.Model = "Android", strings.TrimPrefix(platform.OSVersion(), "Android "), os.Getenv("LAZEYKA_MODEL")
+		if id.Model == "" {
+			id.Model = "Android"
+		}
+	}
+	return id
 }
 
 // --- jobs -----------------------------------------------------------------
@@ -368,6 +383,7 @@ func (a *App) jobDone(id string, err error, result any) {
 // Status is the snapshot returned to the UI.
 type Status struct {
 	Version     string          `json:"version"`
+	Platform    string          `json:"platform"` // windows | android | dev
 	Dev         bool            `json:"dev"`
 	Admin       bool            `json:"admin"`
 	VPN         string          `json:"vpn"`
@@ -407,7 +423,7 @@ func (a *App) Status() Status {
 		Zapret: a.zap, ZapretError: a.zapErr, Strategy: a.s.Zapret.Strategy,
 		Up: a.up, Down: a.down,
 		Servers: len(a.s.Servers), Subs: len(a.s.Subscriptions),
-		Mihomo: mErr == nil, ZapretInst: zapret.Paths{Dir: a.P.Zapret}.Installed(),
+		Mihomo: mErr == nil, ZapretInst: a.dpiInstalled(), Platform: platformName(a.Dev),
 		Jobs: jobs, Onboarded: a.s.App.Onboarded, ZapretOn: a.s.Zapret.Enabled,
 	}
 	st.HasVPN = st.Servers > 0 || st.Subs > 0
@@ -489,7 +505,7 @@ func (a *App) refreshTray() {
 	default:
 		st.Mode, st.Status = "off", "VPN выключен"
 		if zap == "on" {
-			st.Status = "Только zapret"
+			st.Status = "Только " + dpiName()
 		}
 	}
 	if zap == "error" && st.Mode != "err" {
@@ -497,7 +513,7 @@ func (a *App) refreshTray() {
 	}
 	st.Tip = "Лазейка — " + st.Status
 	if zap == "on" {
-		st.Tip += " · zapret"
+		st.Tip += " · " + dpiName()
 	}
 	if vpn == "error" && verr != "" {
 		st.Tip += "\n" + verr
@@ -506,4 +522,14 @@ func (a *App) refreshTray() {
 		st.Tip = string([]rune(st.Tip)[:120])
 	}
 	a.tray.Update(st)
+}
+
+func platformName(dev bool) string {
+	switch {
+	case platform.IsAndroid:
+		return "android"
+	case dev || !platform.IsWindows:
+		return "dev"
+	}
+	return "windows"
 }

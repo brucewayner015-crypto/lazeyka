@@ -171,6 +171,9 @@ func (a *App) ensureMihomo() error {
 	if a.Dev {
 		return errors.New("в режиме разработки укажите путь к mihomo в LAZEYKA_MIHOMO")
 	}
+	if platform.IsAndroid {
+		return errors.New("в приложении нет mihomo — переустановите Лазейку")
+	}
 	return a.installMihomo()
 }
 

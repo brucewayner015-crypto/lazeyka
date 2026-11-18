@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"lazeyka/internal/app"
+	"lazeyka/internal/host"
 	"lazeyka/internal/logx"
 	"lazeyka/internal/platform"
 	"lazeyka/internal/settings"
@@ -47,6 +48,10 @@ func main() {
 	flag.Parse()
 	update.UserAgent = "Lazeyka/" + app.Version
 
+	if platform.IsAndroid {
+		runAndroid()
+		return
+	}
 	if runtime.GOOS != "windows" || *dev {
 		runDev()
 		return
@@ -242,6 +247,62 @@ func runDev() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() { <-sig; tray.Quit() }()
+	tray.Run()
+	a.Shutdown()
+	srv.Close()
+}
+
+// runAndroid: the core started by the Android app (android/). The app passes
+// paths and the phone's details in the environment and listens on the host
+// socket; the UI is the same web page, shown in a WebView.
+func runAndroid() {
+	sock := os.Getenv("LAZEYKA_HOST_SOCKET")
+	if sock == "" {
+		fmt.Fprintln(os.Stderr, "LAZEYKA_HOST_SOCKET не задан")
+		os.Exit(2)
+	}
+	h, err := host.Dial(sock)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "нет связи с приложением:", err)
+		os.Exit(2)
+	}
+	platform.Host = h
+	app.SetDNSHook(platform.SetDNS)
+	p := app.NewPaths(platform.DataRoot())
+	a, err := app.New(p, false)
+	if err != nil {
+		_ = h.Tell("fatal", map[string]string{"error": err.Error()})
+		os.Exit(1)
+	}
+	srv, err := web.New(a)
+	if err != nil {
+		_ = h.Tell("fatal", map[string]string{"error": err.Error()})
+		os.Exit(1)
+	}
+	a.UIURL = srv.URL()
+	go func() {
+		if err := srv.Serve(); err != nil {
+			logx.Errorf("интерфейс: %v", err)
+		}
+	}()
+	tray := platform.NewTray(platform.TrayCallbacks{}, nil, p.IconDir)
+	a.SetTray(tray)
+	a.OpenUIHook = func() { _ = platform.OpenUI(a.UIURL) }
+	a.QuitHook = tray.Quit
+	_ = h.Tell("ready", map[string]string{"url": a.UIURL, "version": app.Version})
+	go func() {
+		for ev := range h.Events() {
+			if ev.Name == "quit" {
+				tray.Quit()
+				continue
+			}
+			go a.HandleHostEvent(ev)
+		}
+		// the app is gone: nothing can show the UI or own the VPN interface
+		logx.Warnf("связь с приложением потеряна, Лазейка завершается")
+		tray.Quit()
+	}()
+	a.Start(os.Getenv("LAZEYKA_AUTOSTART") == "1")
 	tray.Run()
 	a.Shutdown()
 	srv.Close()

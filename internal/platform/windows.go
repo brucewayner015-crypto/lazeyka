@@ -1134,3 +1134,9 @@ func BlockedByAntivirus(err error) bool {
 
 // IsWindows is true on Windows.
 const IsWindows = true
+
+// IsAndroid is true in the Android build.
+const IsAndroid = false
+
+// SetDNS is used on Android only.
+func SetDNS(servers []string) {}

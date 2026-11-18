@@ -39,12 +39,11 @@ type StrategiesView struct {
 // RankedStrategies lists the strategies, the ones that worked first (most
 // successes, then the fastest), the rest in Flowseal's order.
 func (a *App) RankedStrategies() StrategiesView {
-	p := a.zpaths()
-	v := StrategiesView{Installed: p.Installed(), Current: a.Settings().Zapret.Strategy}
+	v := StrategiesView{Installed: a.dpiInstalled(), Current: a.Settings().Zapret.Strategy}
 	if !v.Installed {
 		return v
 	}
-	list, err := zapret.ListStrategies(p.Dir)
+	list, err := a.strategyList()
 	if err != nil {
 		return v
 	}

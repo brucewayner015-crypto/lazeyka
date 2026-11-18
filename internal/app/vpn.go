@@ -56,6 +56,9 @@ func (a *App) connectLocked() error {
 	a.autoTestAt = time.Time{} // a new mihomo knows no delays yet
 	a.mu.Unlock()
 	fail := func(err error) error {
+		if platform.IsAndroid {
+			a.releaseAndroidTun(true)
+		}
 		a.endNetFix("")
 		a.setVPN("error", err.Error())
 		return err
@@ -85,6 +88,12 @@ func (a *App) connectLocked() error {
 		ZapretActive:    a.zr.Running(),
 		HWID:            a.hwid(s.HWIDSalt),
 	}
+	if platform.IsAndroid {
+		rt.Android, rt.TunFD, rt.TunName = true, 3, ""
+		if a.dpiInstalled() {
+			rt.DPIPort = a.dpiPort
+		}
+	}
 	if rt.APIPort == 0 || rt.DirectSocksPort == 0 {
 		return fail(errors.New("не удалось выделить локальные порты"))
 	}
@@ -99,12 +108,19 @@ func (a *App) connectLocked() error {
 	if err := a.mihomo.Test(a.configPath()); err != nil {
 		return fail(err)
 	}
-	if rt.TunEnabled {
+	if rt.TunEnabled && platform.IsAndroid {
+		if err := a.openAndroidTun(s); err != nil {
+			return fail(err)
+		}
+	} else if rt.TunEnabled {
 		a.checkOtherVPN(true)
 		a.beginNetFix()
 	}
 	if err := a.mihomo.Start(a.configPath()); err != nil {
 		return fail(err)
+	}
+	if platform.IsAndroid {
+		a.releaseAndroidTun(false) // mihomo holds the interface now
 	}
 	api := core.NewAPI(rt.APIPort, rt.Secret)
 	if err := core.WaitReady(a.ctx, api, a.mihomo, 25*time.Second); err != nil {
@@ -138,6 +154,9 @@ func (a *App) Disconnect() {
 func (a *App) disconnectLocked() {
 	a.stopTraffic()
 	a.mihomo.Stop()
+	if platform.IsAndroid {
+		a.releaseAndroidTun(true)
+	}
 	a.endNetFix("")
 	a.mu.Lock()
 	a.api, a.built = nil, nil
@@ -449,6 +468,9 @@ func (a *App) onMihomoExit(err error, uptime time.Duration, lastErr string) {
 	}
 	if len(recent) >= 4 {
 		a.stopTraffic()
+		if platform.IsAndroid {
+			a.releaseAndroidTun(true) // a dead interface would swallow all traffic
+		}
 		a.endNetFix("")
 		a.setVPN("error", msg+" (несколько раз подряд)")
 		return

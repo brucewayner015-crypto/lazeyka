@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -30,6 +31,11 @@ type Mihomo struct {
 	OnExit func(err error, uptime time.Duration, lastErr string)
 	// OnLine sees every log line (from mihomo's output goroutine: keep it quick).
 	OnLine func(level, msg string)
+	// ExtraFiles are passed to the next Start as descriptors 3, 4… (Android:
+	// the VPN interface).
+	ExtraFiles []*os.File
+	// Env is added to the environment of mihomo.
+	Env []string
 }
 
 var versionRe = regexp.MustCompile(`v\d+\.\d+\.\d+`)
@@ -105,6 +111,10 @@ func (m *Mihomo) Start(configPath string) error {
 	}
 	cmd := exec.Command(m.Bin, "-d", m.Home, "-f", configPath)
 	cmd.Dir = m.Home
+	cmd.ExtraFiles, m.ExtraFiles = m.ExtraFiles, nil
+	if len(m.Env) > 0 {
+		cmd.Env = append(os.Environ(), m.Env...)
+	}
 	lw := &logx.LineWriter{Src: "mihomo"}
 	lw.OnLine = func(level, msg string) {
 		if level == "error" {

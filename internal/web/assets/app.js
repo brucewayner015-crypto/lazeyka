@@ -4,6 +4,26 @@
 
 const $ = (sel, root = document) => root.querySelector(sel);
 
+// Android: the same UI on a phone; zapret's job is done by ByeDPI there and
+// Windows-only parts are hidden. tx() adapts texts.
+let ANDROID = false;
+const TX = [[/zapret/g, 'ByeDPI'], [/компьютере/g, 'телефоне'], [/компьютера/g, 'телефона'], [/компьютер/g, 'телефон'],
+  [/в трее/g, 'в уведомлении'], [/Скачать отчёт/g, 'Сохранить отчёт']];
+function tx(v) {
+  if (!ANDROID || typeof v !== 'string') return v;
+  for (const [re, to] of TX) v = v.replace(re, to);
+  return v;
+}
+function setPlatform(st) {
+  if (ANDROID || st.platform !== 'android') return;
+  ANDROID = true;
+  document.body.classList.add('android');
+  for (const q of QUICK) for (const o of q.opts) if (o[2] === 'zapret') o[0] = 'ByeDPI';
+  document.querySelectorAll('.nav').forEach(b => { b.textContent = tx(b.textContent); });
+  const n = document.querySelector('.nav[data-tab="zapret"]');
+  if (n) n.textContent = 'Обход DPI';
+}
+
 function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs || {})) {
@@ -12,12 +32,13 @@ function h(tag, attrs, ...children) {
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2), v);
     else if (k === 'value') el.value = v;
     else if (k === 'checked') el.checked = !!v;
-    else if (k === 'text') el.textContent = v;
+    else if (k === 'text') el.textContent = tx(v);
+    else if (k === 'title' || k === 'aria-label' || k === 'placeholder') el.setAttribute(k, tx(v));
     else el.setAttribute(k, v === true ? '' : v);
   }
   for (const c of children.flat(Infinity)) {
     if (c === undefined || c === null || c === false) continue;
-    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    el.append(c instanceof Node ? c : document.createTextNode(tx(String(c))));
   }
   return el;
 }
@@ -50,7 +71,7 @@ async function api(path, body) {
 let toastTimer;
 function toast(msg, isErr) {
   const t = $('#toast');
-  t.textContent = msg;
+  t.textContent = tx(msg);
   t.className = 'toast' + (isErr ? ' err' : '');
   t.hidden = false;
   clearTimeout(toastTimer);
@@ -879,6 +900,39 @@ function area(label, hint, value, rows) {
   return [h('div', { class: 'field' }, h('label', {}, label), ta, hint ? h('small', {}, hint) : null), ta];
 }
 
+// Android: apps that skip the VPN altogether (banks, Госуслуги)
+function bypassApps(r) {
+  const box = h('div', { class: 'panel applist' }, h('p', { class: 'hint', style: 'margin:0' }, 'Загружаю список приложений…'));
+  const on = new Set(r.bypass_apps || []);
+  const search = h('input', { type: 'search', placeholder: 'Найти приложение', style: 'width:100%' });
+  const showSys = h('input', { type: 'checkbox' });
+  let apps = [];
+  const draw = () => {
+    const q = search.value.trim().toLowerCase();
+    const list = apps.filter(a => (showSys.checked || !a.system || on.has(a.package)) &&
+      (!q || a.label.toLowerCase().includes(q) || a.package.includes(q)));
+    put(box, list.length ? list.map(a => h('label', { class: 'app-row' },
+      h('input', { type: 'checkbox', checked: on.has(a.package), onchange: ev => { ev.target.checked ? on.add(a.package) : on.delete(a.package); } }),
+      h('span', {}, a.label, h('small', {}, a.package)))) : h('p', { class: 'hint', style: 'margin:0' }, 'Ничего не найдено'));
+  };
+  search.addEventListener('input', draw);
+  showSys.addEventListener('change', draw);
+  api('android/apps').then(d => { apps = d.apps || []; draw(); }).catch(e => put(box, h('p', { class: 'hint no', style: 'margin:0' }, e.message)));
+  return [
+    h('h2', {}, 'Приложения мимо VPN'),
+    h('p', { class: 'hint' }, 'Их трафик вообще не заходит в Лазейку: так банки и Госуслуги не видят VPN. Российские сайты в остальных приложениях и так идут напрямую.'),
+    h('div', { class: 'row-actions', style: 'margin-bottom:8px' }, search),
+    h('label', { class: 'hint', style: 'display:flex;gap:8px;align-items:center;margin:0 0 8px' }, showSys, 'Показывать системные'),
+    box,
+    h('div', { class: 'row-actions', style: 'margin-top:12px' },
+      h('button', { class: 'btn primary', onclick: async () => {
+        await act(() => api('android/bypass', { packages: [...on] }), 'Сохранено, VPN перезапускается');
+        r.bypass_apps = [...on];
+        S.settings = await api('settings');
+      } }, 'Сохранить список')),
+  ];
+}
+
 async function renderRules() {
   const root = $('#tab-rules');
   S.settings = await api('settings');
@@ -932,8 +986,9 @@ async function renderRules() {
       sw('Запрещать QUIC для заблокированного', 'Браузер переходит на обычный TCP, через VPN так быстрее и стабильнее.', r.block_quic, v => { r.block_quic = v; }),
       sw('Прочий UDP — напрямую', 'Игры и звонки, которых нет в списках, не нагружают сервер и не теряют пинг.', r.udp_direct, v => { r.udp_direct = v; })),
     h('h2', {}, 'Свои списки'),
-    h('div', { class: 'grid2' }, fVPN, fDirect, fApps, fPaths, fTorr, fGames),
+    ANDROID ? h('div', { class: 'grid2' }, fVPN, fDirect) : h('div', { class: 'grid2' }, fVPN, fDirect, fApps, fPaths, fTorr, fGames),
     h('div', { class: 'row-actions', style: 'margin-top:20px' }, save),
+    ANDROID ? bypassApps(r) : null,
     h('h2', {}, 'Списки маршрутизации'),
     rulesInfo ? h('div', {},
       h('table', {},
@@ -959,6 +1014,34 @@ function resultsTable(results) {
       h('td', { class: 'num' }, x.ok ? x.ms + ' мс' : ''))));
 }
 
+// strategy name for tables: ByeDPI keys get their description
+function stratName(file) {
+  if (!file) return '';
+  const it = S.strats && S.strats.list && S.strats.list.find(x => x.file === file);
+  if (ANDROID && it) return it.name;
+  if (ANDROID && file.startsWith('custom:')) return 'Своя: ' + file.slice(7);
+  return file.replace(/\.bat$/i, '');
+}
+
+// Android: a ByeDPI command line of your own
+function customStrategy(z) {
+  const cur = (z.strategy || '').startsWith('custom:') ? z.strategy.slice(7) : '';
+  const inp = h('input', { type: 'text', value: cur, spellcheck: 'false', placeholder: '-d1 -s1+s -r1+s', style: 'width:100%;font-family:ui-monospace,monospace' });
+  return [
+    h('h2', {}, 'Своя стратегия'),
+    h('div', { class: 'panel' },
+      h('p', { class: 'hint', style: 'margin:0 0 8px' }, 'Параметры ByeDPI (ciadpi), как в ByeByeDPI. Адрес и порт Лазейка задаёт сама.'),
+      inp,
+      h('div', { class: 'row-actions', style: 'margin-top:8px' },
+        h('button', { class: 'btn', onclick: async () => {
+          const v = inp.value.trim();
+          if (!v) return toast('Введите параметры', true);
+          await act(() => api('zapret/options', { strategy: 'custom:' + v }), 'Стратегия применена');
+          S.stratsAt = 0; renderZapret(); tick();
+        } }, 'Применить'))),
+  ];
+}
+
 async function renderZapret() {
   const root = $('#tab-zapret');
   const z = await api('zapret');
@@ -968,7 +1051,8 @@ async function renderZapret() {
   const checking = jobs['zapret-check'] && jobs['zapret-check'].running;
   const parts = [
     h('h1', {}, 'zapret'),
-    h('p', { class: 'lead' }, 'Открывает YouTube и Discord без VPN: обманывает DPI провайдера прямо на вашем компьютере. Тяжёлое видео не идёт через сервер, и он дольше остаётся незамеченным.'),
+    ANDROID ? h('p', { class: 'lead' }, 'Открывает YouTube и Discord без сервера: ByeDPI разбивает и маскирует первые пакеты соединения, и DPI провайдера не узнаёт сайт. Root не нужен. Тяжёлое видео не идёт через сервер, и он дольше остаётся незамеченным.')
+      : h('p', { class: 'lead' }, 'Открывает YouTube и Discord без VPN: обманывает DPI провайдера прямо на вашем компьютере. Тяжёлое видео не идёт через сервер, и он дольше остаётся незамеченным.'),
   ];
   const stateText = { on: 'Работает', starting: 'Запускается…', error: 'Не работает', missing: 'Недоступен', off: 'Выключен', paused: 'На паузе' }[st.zapret] || st.zapret;
   const paused = st.zapret === 'paused';
@@ -976,13 +1060,13 @@ async function renderZapret() {
     h('div', {},
       h('div', { class: 'status-word ' + (st.zapret === 'on' ? 'on' : st.zapret === 'error' ? 'err' : ''), style: 'font-size:34px' }, stateText),
       paused ? h('p', { class: 'status-sub' }, 'Пока включён VPN: на этом компьютере zapret и VPN мешают друг другу, поэтому YouTube и Discord сейчас идут через сервер. Выключите VPN — zapret включится сам.')
-        : st.zapret_error ? h('p', { class: 'status-sub err' }, linkify(st.zapret_error)) : h('p', { class: 'status-sub' }, z.installed ? 'Версия ' + (z.version || 'неизвестна') + ', стратегия ' + (z.strategy || '').replace(/\.bat$/i, '') : 'zapret ещё не скачан')),
+        : st.zapret_error ? h('p', { class: 'status-sub err' }, linkify(st.zapret_error)) : h('p', { class: 'status-sub' }, z.installed ? (ANDROID ? 'Стратегия: ' + stratName(z.strategy) : 'Версия ' + (z.version || 'неизвестна') + ', стратегия ' + (z.strategy || '').replace(/\.bat$/i, '')) : 'zapret ещё не скачан')),
     h('button', {
       class: 'btn big ' + (z.enabled ? '' : 'primary'), disabled: testing,
       onclick: async () => { await act(() => api('zapret/enable', { on: !z.enabled })); setTimeout(() => { tick().then(renderZapret); }, 1800); },
     }, z.enabled ? 'Выключить zapret' : 'Включить zapret')));
 
-  if (!z.installed) {
+  if (!z.installed && !ANDROID) {
     parts.push(h('div', { class: 'callout' }, 'zapret скачивается с официального GitHub Flowseal при первом включении.',
       h('div', { class: 'row-actions', style: 'margin-top:8px' }, h('button', { class: 'btn', onclick: () => act(() => api('zapret/install', {}), 'Загрузка началась') }, 'Скачать сейчас'))));
   }
@@ -1000,7 +1084,8 @@ async function renderZapret() {
       : h('select', { disabled: true }, h('option', {}, (z.strategy || '').replace(/\.bat$/i, '')));
     parts.push(
       h('h2', {}, 'Стратегия'),
-      h('p', { class: 'hint' }, 'Разные провайдеры ловят по-разному. Автоподбор по очереди пробует все стратегии Flowseal и оставляет ту, с которой открывается больше всего. Займёт пару минут, YouTube и Discord в это время могут подвисать.'),
+      h('p', { class: 'hint' }, ANDROID ? 'Разные провайдеры и сети (Wi-Fi, мобильный интернет) ловят по-разному. Автоподбор по очереди пробует стратегии и оставляет ту, с которой открывается больше всего. Займёт пару минут. Сменили сеть и YouTube снова тормозит — подберите ещё раз.'
+        : 'Разные провайдеры ловят по-разному. Автоподбор по очереди пробует все стратегии Flowseal и оставляет ту, с которой открывается больше всего. Займёт пару минут, YouTube и Discord в это время могут подвисать.'),
       h('div', { class: 'row-actions' }, sel,
         h('button', { class: 'btn primary', disabled: testing, onclick: async () => { await act(() => api('zapret/autoselect', {}), 'Подбор начат'); tick(); } }, testing ? 'Подбираю…' : 'Подобрать автоматически'),
         h('button', { class: 'btn', disabled: testing || checking, onclick: async () => { await act(() => api('zapret/check', {})); tick(); } }, checking ? 'Проверяю…' : 'Проверить сейчас')));
@@ -1018,7 +1103,7 @@ async function renderZapret() {
         h('table', {},
           h('tr', {}, h('th', {}, 'Стратегия'), h('th', {}, 'YouTube'), h('th', {}, 'Discord'), h('th', {}, 'Всего'), h('th', {}, 'Отклик')),
           z.scores.map(sc => h('tr', { class: sc.file && sc.file === best ? 'best' : '' },
-            h('td', {}, sc.file ? sc.file.replace(/\.bat$/i, '') : 'Без zapret'),
+            h('td', {}, sc.file ? stratName(sc.file) : 'Без zapret'),
             sc.err ? h('td', { colspan: 4, class: 'no' }, sc.err) : [
               h('td', { class: 'num' }, sc.summary.youtube + ' из 4'),
               h('td', { class: 'num' }, sc.summary.discord + ' из 4'),
@@ -1026,6 +1111,7 @@ async function renderZapret() {
               h('td', { class: 'num' }, sc.summary.avg_ms ? sc.summary.avg_ms + ' мс' : '—')]))));
     }
 
+    if (ANDROID) { parts.push(customStrategy(z)); put(root, ...parts); return; }
     const gf = h('select', { onchange: () => act(() => api('zapret/options', { game_filter: gf.value }), 'Применено') },
       [['disabled', 'Выключен'], ['all', 'TCP и UDP'], ['tcp', 'Только TCP'], ['udp', 'Только UDP']].map(([v, t]) => h('option', { value: v, selected: z.game_filter === v ? true : undefined }, t)));
     const ip = h('select', { onchange: () => act(() => api('zapret/options', { ipset: ip.value }), 'Применено') },
@@ -1131,13 +1217,14 @@ async function renderSettings() {
     h('h1', {}, 'Настройки'),
     h('h2', {}, 'Запуск'),
     h('div', { class: 'panel' },
-      sw('Запускать вместе с Windows', 'Без запроса прав: через планировщик задач.', a.autostart, v => setApp('autostart', v)),
+      ANDROID ? null : sw('Запускать вместе с Windows', 'Без запроса прав: через планировщик задач.', a.autostart, v => setApp('autostart', v)),
       sw('Включать VPN при запуске', 'Если есть хотя бы один сервер или подписка.', a.auto_connect, v => setApp('auto_connect', v)),
-      sw('При автозапуске не открывать окно', 'Лазейка остаётся в трее, окно открывается по щелчку на значке.', a.start_minimized, v => setApp('start_minimized', v)),
-      sw('Проверять обновления', 'Лазейки — дважды в день, mihomo и zapret — раз в день, с GitHub.', a.check_updates, v => setApp('check_updates', v))),
-    h('h2', {}, 'Обновление Лазейки'),
-    selfUpdatePanel(self),
-    defenderPanel(def),
+      ANDROID ? null : sw('При автозапуске не открывать окно', 'Лазейка остаётся в трее, окно открывается по щелчку на значке.', a.start_minimized, v => setApp('start_minimized', v)),
+      ANDROID ? null : sw('Проверять обновления', 'Лазейки — дважды в день, mihomo и zapret — раз в день, с GitHub.', a.check_updates, v => setApp('check_updates', v)),
+      ANDROID ? h('p', { class: 'hint', style: 'margin:8px 0 0' }, 'Чтобы VPN включался вместе с телефоном и не выключался системой: Настройки Android → Сеть → VPN → ⚙ у Лазейки → «Постоянная VPN». Там же «Блокировать соединения без VPN», если нужно, чтобы ничего не шло мимо.') : null),
+    ANDROID ? null : h('h2', {}, 'Обновление Лазейки'),
+    ANDROID ? null : selfUpdatePanel(self),
+    ANDROID ? null : defenderPanel(def),
     h('h2', {}, 'Панель слева'),
     h('p', { class: 'hint' }, 'Переключатели VPN и zapret видны на любой вкладке. Здесь — что показывать под ними.'),
     h('div', { class: 'panel' },
@@ -1149,6 +1236,7 @@ async function renderSettings() {
       sw('Стратегия zapret', 'Список стратегий: те, что помогли на этом компьютере, — сверху.', !ui.hide_strategy, v => uiSet({ hide_strategy: !v })),
       sw('Только переключатели', 'Скрыть всё остальное. То же делает «Скрыть подробности» в самой панели.', !!ui.panel_collapsed, v => uiSet({ panel_collapsed: v }))),
     h('h2', {}, 'Движки'),
+    ANDROID ? h('p', { class: 'hint' }, 'Встроены в приложение и обновляются вместе с ним: mihomo ' + (e.mihomo || '—') + ', ByeDPI.') : [
     h('p', { class: 'hint' }, 'Скачиваются только с официальных страниц GitHub, файл сверяется с контрольной суммой SHA-256 из релиза.'),
     h('table', {},
       h('tr', {}, h('th', {}, 'Движок'), h('th', {}, 'Установлен'), h('th', {}, 'Последний'), h('th', {}, '')),
@@ -1156,13 +1244,13 @@ async function renderSettings() {
       engRow('zapret (Flowseal)', e.zapret, e.zapret_latest, e.zapret_update, 'zapret')),
     e.error ? h('p', { class: 'hint no' }, e.error) : null,
     h('div', { class: 'row-actions', style: 'margin-top:10px' },
-      h('button', { class: 'btn', onclick: async () => { await act(() => api('engines/check', {})); renderSettings(); } }, 'Проверить обновления')),
+      h('button', { class: 'btn', onclick: async () => { await act(() => api('engines/check', {})); renderSettings(); } }, 'Проверить обновления'))],
     h('h2', {}, 'Сеть'),
     h('div', { class: 'grid2' },
       h('div', { class: 'field' }, h('label', {}, 'Локальный прокси для программ'),
         h('div', { class: 'row-actions' }, port, h('button', { class: 'btn', onclick: () => setApp('mixed_port', parseInt(port.value || '0', 10)) }, 'Сохранить')),
         h('small', {}, '0 — выключен (рекомендуется). Весь трафик и так идёт через виртуальный адаптер, а открытый порт на 127.0.0.1 помогает приложениям вычислить VPN.')),
-      h('div', { class: 'field' }, h('label', {}, 'Сетевой стек туннеля'), stack, h('small', {}, 'Меняйте, только если что-то не работает в смешанном режиме.'))),
+      ANDROID ? null : h('div', { class: 'field' }, h('label', {}, 'Сетевой стек туннеля'), stack, h('small', {}, 'Меняйте, только если что-то не работает в смешанном режиме.'))),
     h('h2', {}, 'Диагностика'),
     h('div', { class: 'panel' },
       sw('Подробный журнал', 'Записывает каждое соединение. Включайте только для поиска проблем.', a.verbose, v => setApp('verbose', v)),
@@ -1172,7 +1260,7 @@ async function renderSettings() {
     h('h2', {}, 'Выход и удаление'),
     h('div', { class: 'row-actions' },
       h('button', { class: 'btn', onclick: () => confirm('Закрыть Лазейку? VPN и zapret выключатся.') && api('quit', {}) }, 'Выйти из Лазейки'),
-      h('button', {
+      ANDROID ? null : h('button', {
         class: 'btn danger', onclick: () => {
           if (confirm('Удалить Лазейку с компьютера? Серверы, настройки, mihomo и zapret будут удалены.')) {
             api('uninstall', {}).then(() => toast('Лазейка удаляется'));
@@ -1248,6 +1336,7 @@ let lastVPN = '', lastZap = '', groupsAt = 0, offline = false;
 async function tick() {
   try {
     S.status = await api('state');
+    setPlatform(S.status);
     if (offline) { offline = false; toast('Лазейка снова на связи'); }
   } catch (e) {
     const updating = S.updating || (S.status && S.status.jobs && S.status.jobs['self-update'] && S.status.jobs['self-update'].running);

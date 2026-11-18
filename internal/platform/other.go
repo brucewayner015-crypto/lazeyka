@@ -1,4 +1,4 @@
-//go:build !windows
+//go:build !windows && !lzandroid
 
 package platform
 
@@ -13,6 +13,9 @@ import (
 
 // IsWindows is true on Windows.
 const IsWindows = false
+
+// IsAndroid is true in the Android build.
+const IsAndroid = false
 
 // DataRoot for development runs.
 func DataRoot() string {
@@ -137,3 +140,6 @@ func StartDetached(exe string, args ...string) error {
 	cmd.Dir = filepath.Dir(exe)
 	return cmd.Start()
 }
+
+// SetDNS is used on Android only.
+func SetDNS(servers []string) {}

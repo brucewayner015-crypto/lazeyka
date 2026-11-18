@@ -1,0 +1,41 @@
+plugins {
+    id "com.android.application"
+}
+
+def vName = project.findProperty("lzVersion") ?: "0.1.0"
+def parts = vName.tokenize(".").collect { it.toInteger() }
+def vCode = parts[0] * 10000 + parts[1] * 100 + parts[2]
+
+android {
+    namespace "ru.lazeyka"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "ru.lazeyka"
+        minSdk 26
+        targetSdk 35
+        versionCode vCode
+        versionName vName
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            // signed outside the build (tools/android/sign.py): the key never
+            // goes to GitHub
+        }
+    }
+
+    packaging {
+        jniLibs {
+            // the core, mihomo and ByeDPI are programs, not libraries: they
+            // must be unpacked to nativeLibraryDir to be started
+            useLegacyPackaging true
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}

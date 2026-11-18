@@ -26,6 +26,8 @@ const (
 	GAI         = "AI"
 	GBlocked    = "BLOCKED"
 	GOther      = "OTHER"
+	// PByeDPI is the local ByeDPI proxy (Android's stand-in for zapret).
+	PByeDPI = "ByeDPI"
 )
 
 // GroupLabels are shown in the UI.
@@ -129,7 +131,13 @@ type Runtime struct {
 	TunEnabled      bool
 	TunName         string
 	ZapretActive    bool
-	HWID            HWID
+	// Android: mihomo gets the VPN interface from VpnService as an inherited
+	// descriptor; YouTube and Discord go through the local ByeDPI proxy
+	// instead of DIRECT (zapret needs root there).
+	Android bool
+	TunFD   int
+	DPIPort int
+	HWID    HWID
 }
 
 // HWID headers sent to subscription panels that bind devices.
@@ -401,9 +409,26 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 	}
 	youtubeDirect := r.YouTube == settings.ModeDirect || (r.YouTube == settings.ModeZapret && (rt.ZapretActive || !b.HasVPN))
 	discordDirect := r.Discord == settings.ModeZapret && (rt.ZapretActive || !b.HasVPN)
+	// where "zapret" mode sends traffic: DIRECT (zapret works on the packets)
+	// or the ByeDPI proxy on Android
+	ytOut, dcOut := []string{"DIRECT"}, []string{"DIRECT"}
+	if rt.DPIPort > 0 {
+		// both stay selectable, so ByeDPI can be switched on and off
+		// without rebuilding the config
+		dpi := []string{PByeDPI, "DIRECT"}
+		if !rt.ZapretActive {
+			dpi = []string{"DIRECT", PByeDPI}
+		}
+		if r.YouTube == settings.ModeZapret {
+			ytOut = dpi
+		}
+		if r.Discord == settings.ModeZapret {
+			dcOut = dpi
+		}
+	}
 	groups = append(groups,
-		sel(GYouTube, order(youtubeDirect, []string{"DIRECT"}, []string{GAuto}), nil),
-		sel(GDiscord, order(discordDirect, []string{"DIRECT"}, []string{GVoice, GAuto}), nil),
+		sel(GYouTube, order(youtubeDirect, ytOut, []string{GAuto}), nil),
+		sel(GDiscord, order(discordDirect, dcOut, []string{GVoice, GAuto}), nil),
 		sel(GMessengers, order(r.Messengers == settings.ModeDirect, []string{"DIRECT"}, []string{GVoice, GAuto}), nil),
 	)
 	aiMembers := []string{GAuto}
@@ -456,19 +481,22 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 	for _, cidr := range []string{"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "169.254.0.0/16", "100.64.0.0/10", "224.0.0.0/4", "255.255.255.255/32"} {
 		add("IP-CIDR," + cidr + ",DIRECT,no-resolve")
 	}
-	if re := nameRegex(r.TorrentApps); re != "" {
+	// Process names are Windows programs; on Android whole apps skip the VPN
+	// instead (VpnService bypass list).
+	procRules := !rt.Android
+	if re := nameRegex(r.TorrentApps); re != "" && procRules {
 		if b.HasVPN {
 			add("AND,((PROCESS-NAME-REGEX," + re + "),(RULE-SET,ru-blocked))," + GBlocked)
 		}
 		add("PROCESS-NAME-REGEX," + re + ",DIRECT")
 	}
-	if re := nameRegex(r.DirectApps); re != "" {
+	if re := nameRegex(r.DirectApps); re != "" && procRules {
 		add("PROCESS-NAME-REGEX," + re + ",DIRECT")
 	}
-	if re := pathRegex(r.DirectPaths); re != "" {
+	if re := pathRegex(r.DirectPaths); re != "" && procRules {
 		add("PROCESS-PATH-REGEX," + re + ",DIRECT")
 	}
-	if re := nameRegex(r.GameApps); re != "" {
+	if re := nameRegex(r.GameApps); re != "" && procRules {
 		add("PROCESS-NAME-REGEX," + re + ",DIRECT")
 	}
 	for _, d := range r.CustomDirect {
@@ -481,8 +509,12 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 			add(rule)
 		}
 	}
+	if rt.DPIPort > 0 && rt.ZapretActive && r.YouTube == settings.ModeZapret {
+		// ByeDPI works on TCP: YouTube's QUIC would go around it
+		add("AND,((NETWORK,UDP),(DST-PORT,443),(RULE-SET,youtube)),REJECT")
+	}
 	if r.BlockQUIC && b.HasVPN {
-		if !youtubeDirect {
+		if !youtubeDirect && !(rt.DPIPort > 0 && rt.ZapretActive && r.YouTube == settings.ModeZapret) {
 			add("AND,((NETWORK,UDP),(DST-PORT,443),(RULE-SET,youtube)),REJECT")
 		}
 		add("AND,((NETWORK,UDP),(DST-PORT,443),(OR,((RULE-SET,ru-blocked),(RULE-SET,geoblock),(RULE-SET,ai)))),REJECT")
@@ -535,7 +567,19 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 
 	// --- TUN -----------------------------------------------------------------
 	var tun omap.M
-	if rt.TunEnabled {
+	if rt.TunEnabled && rt.TunFD > 0 {
+		// Android: VpnService made the interface (address, routes, DNS,
+		// bypassed apps); mihomo only reads and writes packets.
+		tun = omap.New(
+			"enable", true,
+			"stack", "gvisor",
+			"file-descriptor", rt.TunFD,
+			"auto-route", false,
+			"auto-detect-interface", false,
+			"dns-hijack", []string{"any:53", "tcp://any:53"},
+			"mtu", AndroidMTU,
+		)
+	} else if rt.TunEnabled {
 		tun = omap.New(
 			"enable", true,
 			"stack", s.App.TunStack,
@@ -586,7 +630,7 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 		omap.KV{K: "ipv6", V: false},
 		omap.KV{K: "unified-delay", V: true},
 		omap.KV{K: "tcp-concurrent", V: true},
-		omap.KV{K: "find-process-mode", V: "strict"},
+		omap.KV{K: "find-process-mode", V: findProcess(rt)},
 		omap.KV{K: "external-controller", V: fmt.Sprintf("127.0.0.1:%d", rt.APIPort)},
 		omap.KV{K: "secret", V: rt.Secret},
 		omap.KV{K: "profile", V: omap.New("store-selected", false, "store-fake-ip", true)},
@@ -607,6 +651,11 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 		omap.KV{K: "dns", V: dns},
 		omap.KV{K: "listeners", V: listeners},
 	)
+	if rt.DPIPort > 0 {
+		cfg = append(cfg, omap.KV{K: "proxies", V: []any{omap.New(
+			"name", PByeDPI, "type", "socks5", "server", "127.0.0.1", "port", rt.DPIPort, "udp", true,
+		)}})
+	}
 	if len(providers) > 0 {
 		cfg = append(cfg, omap.KV{K: "proxy-providers", V: providers})
 	}
@@ -721,4 +770,15 @@ func customRule(entry, target string) string {
 		return kind + "," + value + "," + target + ",no-resolve"
 	}
 	return kind + "," + value + "," + target
+}
+
+// AndroidMTU of the VPN interface.
+const AndroidMTU = 1500
+
+// Android apps cannot read /proc/net of other apps: process rules are off.
+func findProcess(rt Runtime) string {
+	if rt.Android {
+		return "off"
+	}
+	return "strict"
 }

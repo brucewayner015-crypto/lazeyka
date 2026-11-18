@@ -3,6 +3,7 @@ package zapret
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -21,6 +22,17 @@ type Runner struct {
 
 	// OnExit is called when winws exits on its own (not via Stop).
 	OnExit func(err error, uptime time.Duration)
+
+	// Exe replaces winws.exe (Android: ByeDPI), Label names it in the log.
+	Exe   string
+	Label string
+}
+
+func (r *Runner) label() string {
+	if r.Label != "" {
+		return r.Label
+	}
+	return "zapret"
 }
 
 // Start launches winws with args. It is a no-op if already running.
@@ -30,18 +42,22 @@ func (r *Runner) Start(p Paths, strategy string, args []string) error {
 	if r.cmd != nil {
 		return nil
 	}
-	cmd := exec.Command(p.Winws(), args...)
-	cmd.Dir = p.Bin()
+	exe, dir := p.Winws(), p.Bin()
+	if r.Exe != "" {
+		exe, dir = r.Exe, filepath.Dir(r.Exe)
+	}
+	cmd := exec.Command(exe, args...)
+	cmd.Dir = dir
 	lw := &logx.LineWriter{Src: "zapret"}
 	cmd.Stdout, cmd.Stderr = lw, lw
 	platform.PrepareChild(cmd)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("не удалось запустить winws.exe: %w", err)
+		return fmt.Errorf("не удалось запустить %s: %w", filepath.Base(exe), err)
 	}
 	platform.AttachChild(cmd.Process.Pid)
 	done := make(chan struct{})
 	r.cmd, r.done, r.stopping, r.startedAt, r.strategy = cmd, done, false, time.Now(), strategy
-	logx.Infof("zapret запущен: %s (pid %d)", strategy, cmd.Process.Pid)
+	logx.Infof("%s запущен: %s (pid %d)", r.label(), strategy, cmd.Process.Pid)
 	go func() {
 		err := cmd.Wait()
 		r.mu.Lock()
@@ -53,7 +69,7 @@ func (r *Runner) Start(p Paths, strategy string, args []string) error {
 		r.mu.Unlock()
 		close(done)
 		if !expected {
-			logx.Warnf("zapret завершился сам через %s: %v", uptime.Round(time.Second), err)
+			logx.Warnf("%s завершился сам через %s: %v", r.label(), uptime.Round(time.Second), err)
 			if r.OnExit != nil {
 				r.OnExit(err, uptime)
 			}
@@ -76,14 +92,14 @@ func (r *Runner) Stop() {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		logx.Warnf("winws не завершился за 5 секунд")
+		logx.Warnf("%s не завершился за 5 секунд", r.label())
 	}
 	r.mu.Lock()
 	if r.cmd == cmd {
 		r.cmd = nil
 	}
 	r.mu.Unlock()
-	logx.Infof("zapret остановлен")
+	logx.Infof("%s остановлен", r.label())
 }
 
 // Running reports whether winws is alive.

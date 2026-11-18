@@ -33,6 +33,9 @@ func (a *App) StartZapret() error {
 }
 
 func (a *App) startZapretLocked() error {
+	if platform.IsAndroid {
+		return a.startByeDPILocked()
+	}
 	if !platform.IsWindows {
 		a.setZapret("missing", "zapret работает только в Windows")
 		return nil
@@ -124,7 +127,7 @@ func (a *App) firstTune() {
 		return
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 40*time.Second)
-	res := zapret.RunChecks(ctx, a.directProxyURL(), zapret.DefaultChecks())
+	res := zapret.RunChecks(ctx, a.checkProxyURL(), zapret.DefaultChecks())
 	cancel()
 	sum := zapret.Summarize(res)
 	if sum.YouTube >= 3 && sum.Discord >= 3 {
@@ -133,7 +136,11 @@ func (a *App) firstTune() {
 	}
 	logx.Infof("zapret: со стратегией по умолчанию открывается %d из %d — подбираю лучшую", sum.OK, sum.Total)
 	if a.tray != nil {
-		a.tray.Notify("Лазейка подбирает настройки zapret", "Пару минут YouTube и Discord могут подтормаживать.", false)
+		title := "Лазейка подбирает настройки zapret"
+		if platform.IsAndroid {
+			title = "Лазейка подбирает настройки обхода"
+		}
+		a.tray.Notify(title, "Пару минут YouTube и Discord могут подтормаживать.", false)
 	}
 	if err := a.AutoSelectZapret(); err != nil {
 		logx.Warnf("zapret: %v", err)
@@ -172,8 +179,17 @@ func (a *App) SetZapretEnabled(on bool) error {
 	if err := a.update(func(s *settings.Settings) error { s.Zapret.Enabled = on; return nil }); err != nil {
 		return err
 	}
+	if platform.IsAndroid && a.Connected() {
+		// the QUIC rule for YouTube depends on ByeDPI: rebuild the config
+		defer a.ApplyAsync()
+	}
 	if on {
-		return a.StartZapret()
+		err := a.StartZapret()
+		if err == nil && platform.IsAndroid && !a.Connected() && !a.Dev {
+			// ByeDPI only sees traffic that the VPN interface hands to mihomo
+			go func() { _ = a.Connect() }()
+		}
+		return err
 	}
 	a.StopZapret()
 	return nil
@@ -222,7 +238,7 @@ func (a *App) syncZapretGroups(active bool) {
 	api, b := a.api, a.built
 	r := a.s.Routing
 	a.mu.Unlock()
-	if api == nil || b == nil || !b.HasVPN {
+	if api == nil || b == nil || (!b.HasVPN && !platform.IsAndroid) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 4*time.Second)
@@ -230,14 +246,14 @@ func (a *App) syncZapretGroups(active bool) {
 	if r.YouTube == settings.ModeZapret {
 		t := core.GAuto
 		if active {
-			t = "DIRECT"
+			t = dpiDirectTarget()
 		}
 		_ = api.Select(ctx, core.GYouTube, t)
 	}
 	if r.Discord == settings.ModeZapret {
 		t := core.GVoice
 		if active {
-			t = "DIRECT"
+			t = dpiDirectTarget()
 		}
 		_ = api.Select(ctx, core.GDiscord, t)
 	}
@@ -258,7 +274,11 @@ func (a *App) onZapretExit(err error, uptime time.Duration) {
 		return
 	}
 	if fails >= 3 {
-		a.setZapret("error", "winws.exe падает при запуске: "+lastLine("zapret"))
+		name := "winws.exe"
+		if platform.IsAndroid {
+			name = "ByeDPI"
+		}
+		a.setZapret("error", name+" падает при запуске: "+lastLine("zapret"))
 		a.syncZapretGroups(false)
 		return
 	}
@@ -486,13 +506,14 @@ func (a *App) ZapretInfo() ZapretView {
 	p := a.zpaths()
 	s := a.Settings()
 	v := ZapretView{
-		Installed: p.Installed(), Version: s.Zapret.Version, Running: a.zr.Running(),
+		Installed: a.dpiInstalled(), Version: s.Zapret.Version, Running: a.zr.Running(),
 		Strategy: s.Zapret.Strategy, GameFilter: s.Zapret.GameFilter, IPSet: s.Zapret.IPSet,
 		Bind: s.Zapret.BindPhysical, Enabled: s.Zapret.Enabled, PauseVPN: s.Zapret.PauseWithVPN, Paused: a.zapretPaused(),
 	}
 	if v.Installed {
-		v.Strategies, _ = zapret.ListStrategies(p.Dir)
+		v.Strategies, _ = a.strategyList()
 	}
+	_ = p
 	v.Conflicts = a.zapretConflicts()
 	v.Scores = a.strategyScores()
 	a.mu.Lock()
@@ -512,7 +533,7 @@ func (a *App) CheckZapret() error {
 	go func() {
 		ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
 		defer cancel()
-		res := zapret.RunChecks(ctx, a.directProxyURL(), zapret.DefaultChecks())
+		res := zapret.RunChecks(ctx, a.checkProxyURL(), zapret.DefaultChecks())
 		sum := zapret.Summarize(res)
 		if a.zr.Running() {
 			a.recordScore(a.Settings().Zapret.Strategy, sum)
@@ -524,10 +545,10 @@ func (a *App) CheckZapret() error {
 
 // AutoSelectZapret tries every strategy and keeps the best one.
 func (a *App) AutoSelectZapret() error {
-	if !platform.IsWindows {
+	if !platform.IsWindows && !platform.IsAndroid {
 		return errors.New("подбор стратегии работает только в Windows")
 	}
-	if !a.zpaths().Installed() {
+	if !a.dpiInstalled() {
 		return errors.New("zapret ещё не установлен")
 	}
 	if a.zapretPaused() {
@@ -535,6 +556,10 @@ func (a *App) AutoSelectZapret() error {
 	}
 	if !a.jobStart("zapret-test", "Подбор стратегии zapret") {
 		return errors.New("подбор уже идёт")
+	}
+	if platform.IsAndroid {
+		go a.runAutoSelectAndroid()
+		return nil
 	}
 	go a.runAutoSelect()
 	return nil

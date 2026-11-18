@@ -1,0 +1,46 @@
+name: Android
+on:
+  push:
+    branches: [android]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.3"
+      - name: Build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          tools/android/ci.sh 2>&1 | tee build.log
+      # The result (or the log of a failure) goes to the android-build branch:
+      # Лазейка's maintainer reads it from there and signs the APK.
+      - name: Publish
+        if: always()
+        run: |
+          mkdir -p /tmp/out
+          cp build.log /tmp/out/ || true
+          V=$(cat android/VERSION)
+          APK=android/app/build/outputs/apk/release/app-release-unsigned.apk
+          if [ -f "$APK" ]; then cp "$APK" "/tmp/out/Lazeyka-$V-unsigned.apk"; fi
+          echo "${{ github.sha }} ${{ job.status }}" > /tmp/out/STATUS
+          cd /tmp/out
+          git init -q -b android-build
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Android build of ${{ github.sha }}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" android-build
