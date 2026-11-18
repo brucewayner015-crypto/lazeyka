@@ -235,7 +235,7 @@ if ok and REACH:
         print("picker shows the reasons:", ok)
         if os.environ.get("E2E_HOLD"):  # keep the core up to look at the UI
             open(os.environ["E2E_HOLD"], "w").write(state["url"])
-            pump(time.time() + 120, lambda: not os.path.exists(os.environ["E2E_HOLD"]))
+            pump(time.time() + float(os.environ.get("E2E_HOLD_SECS", "120")), lambda: not os.path.exists(os.environ["E2E_HOLD"]))
 if ok:
     send({"event": "quit"})
     # pump stops at the socket's EOF, which comes a moment before the

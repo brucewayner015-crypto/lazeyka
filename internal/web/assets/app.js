@@ -19,10 +19,14 @@ function setPlatform(st) {
   ANDROID = true;
   document.body.classList.add('android');
   for (const q of QUICK) for (const o of q.opts) if (o[2] === 'zapret') o[0] = 'ByeDPI';
-  document.querySelectorAll('.nav').forEach(b => { b.textContent = tx(b.textContent); });
-  const n = document.querySelector('.nav[data-tab="zapret"]');
+  document.querySelectorAll('.nav-label').forEach(l => { l.textContent = tx(l.textContent); });
+  const n = document.querySelector('.nav[data-tab="zapret"] .nav-label');
   if (n) n.textContent = 'Обход DPI';
 }
+
+// A phone-sized screen: the tabs move to a bar at the bottom and the quick
+// panel puts the two switches side by side with the lists under them.
+const PHONE = window.matchMedia('(max-width: 600px)');
 
 function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
@@ -186,6 +190,7 @@ const QUICK = [
 const RENDER = {};
 
 function showTab(tab) {
+  if (PHONE.matches && S.tab && S.tab !== tab) window.scrollTo(0, 0); // a new screen starts at its top
   S.tab = tab;
   document.querySelectorAll('.nav').forEach(b => {
     if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page');
@@ -193,10 +198,19 @@ function showTab(tab) {
   });
   document.querySelectorAll('.tab').forEach(s => { s.hidden = s.id !== 'tab-' + tab; });
   S.homeSig = '';
+  if (PHONE.matches) renderQuick();
   RENDER[tab] && RENDER[tab]();
 }
 
 document.querySelectorAll('.nav').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+// the bottom bar would ride up on the on-screen keyboard and cover the field
+document.addEventListener('focusin', e => {
+  const t = e.target;
+  const typing = (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'file'].includes(t.type)));
+  document.body.classList.toggle('typing', typing);
+});
+document.addEventListener('focusout', () => document.body.classList.remove('typing'));
 
 /* ---------- jobs bar & footer ------------------------------------------------- */
 
@@ -623,13 +637,14 @@ function quickVPN(st, ui, blocked) {
       setTimeout(tick, 400);
     },
   }, h('span', { class: 'qp-name' }, 'VPN'), h('span', { class: 'qp-knob', 'aria-hidden': 'true' }));
+  head.dataset.card = '1';
 
   const full = !ui.panel_collapsed;
-  const rows = [h('div', { class: 'qp-row' },
+  const rows = [h('div', { class: 'qp-row', 'data-card': '1' },
     h('span', { class: 'qp-state' }, state),
     full && !ui.hide_uptime && st.vpn === 'on' ? h('span', { id: 'qp-uptime' }, fmtUptime(st.vpn_since)) : null)];
   if (more) {
-    rows.push(h('button', { class: 'qp-act', onclick: () => showTab('home') }, 'Подробности'));
+    rows.push(h('button', { class: 'qp-act', 'data-card': '1', onclick: () => showTab('home') }, 'Подробности'));
   }
   if (full && st.has_vpn && !ui.hide_server) {
     const sel = blocked ? blockedSelect(blocked, { 'aria-label': 'Сервер для заблокированного' }, true, !ui.hide_ping)
@@ -718,9 +733,10 @@ function quickZapret(st, ui, zs, zt) {
       setTimeout(() => { tick(); S.stratsAt = 0; }, 1500);
     },
   }, h('span', { class: 'qp-name' }, 'zapret'), h('span', { class: 'qp-knob', 'aria-hidden': 'true' }));
+  head.dataset.card = '1';
 
-  const rows = [h('div', { class: 'qp-row' }, h('span', { class: 'qp-state' }, state))];
-  if (st.zapret === 'error') rows.push(h('button', { class: 'qp-act', onclick: () => showTab('zapret') }, 'Подробности'));
+  const rows = [h('div', { class: 'qp-row', 'data-card': '1' }, h('span', { class: 'qp-state' }, state))];
+  if (st.zapret === 'error') rows.push(h('button', { class: 'qp-act', 'data-card': '1', onclick: () => showTab('zapret') }, 'Подробности'));
   if (!ui.panel_collapsed && !ui.hide_strategy && zs && zs.installed && zs.list && zs.list.length) {
     const good = zs.list.some(r => r.checked && !r.failed && r.ok > 0);
     const sel = strategySelect(zs, { 'aria-label': 'Стратегия zapret', disabled: testing }, () => {
@@ -753,13 +769,31 @@ function renderQuick() {
     ui, (set.routing || {}).blocked_select]);
   const a = document.activeElement;
   const choosing = a && a.tagName === 'SELECT' && root.contains(a); // do not close an open list
-  if (sig !== S.qpSig && !choosing) {
-    S.qpSig = sig;
-    put(root, quickVPN(st, ui, blocked), quickZapret(st, ui, zs, zt),
-      h('button', {
-        class: 'qp-fold', 'aria-expanded': String(!ui.panel_collapsed),
-        onclick: () => setUI({ panel_collapsed: !ui.panel_collapsed }),
-      }, ui.panel_collapsed ? 'Подробности' : 'Скрыть подробности'));
+  // phone: the lists under the switches only on «Маршрут», the other tabs
+  // keep the screen for themselves
+  const phoneKey = PHONE.matches ? 'phone:' + (S.tab === 'home') : '';
+  if (sig + phoneKey !== S.qpSig && !choosing) {
+    S.qpSig = sig + phoneKey;
+    const vpn = quickVPN(st, ui, blocked), zap = quickZapret(st, ui, zs, zt);
+    const fold = h('button', {
+      class: 'qp-fold', 'aria-expanded': String(!ui.panel_collapsed),
+      onclick: () => setUI({ panel_collapsed: !ui.panel_collapsed }),
+    }, ui.panel_collapsed ? 'Подробности' : 'Скрыть подробности');
+    root.classList.toggle('phone', PHONE.matches);
+    if (PHONE.matches) {
+      // the switches side by side on top, the lists full width under them
+      const split = blk => {
+        const kids = [...blk.children];
+        const card = h('div', { class: blk.className }, kids.filter(k => k.dataset.card));
+        const rest = kids.filter(k => !k.dataset.card);
+        return [card, rest.length ? h('div', { class: blk.className + ' qp-detail' }, rest) : null];
+      };
+      const [vc, vd] = split(vpn), [zc, zd] = split(zap);
+      if (S.tab === 'home') put(root, h('div', { class: 'qp-cards' }, vc, zc), vd, zd, fold);
+      else put(root, h('div', { class: 'qp-cards' }, vc, zc));
+    } else {
+      put(root, vpn, zap, fold);
+    }
   }
   const up = $('#qp-uptime');
   if (up) up.textContent = fmtUptime(st.vpn_since);
@@ -767,6 +801,8 @@ function renderQuick() {
   if (dn) dn.textContent = '↓ ' + fmtSpeed(st.down);
   if (upl) upl.textContent = '↑ ' + fmtSpeed(st.up);
 }
+
+PHONE.addEventListener('change', () => { S.qpSig = ''; renderQuick(); });
 
 /* ---------- servers ---------------------------------------------------------- */
 
@@ -827,7 +863,7 @@ async function renderServers() {
       if (sv.info.Expire) info += (info ? ', ' : '') + 'до ' + new Date(sv.info.Expire * 1000).toLocaleDateString('ru-RU');
     }
     const host = sub.url.replace(/^(https?:\/\/[^/]+).*/, '$1/…');
-    return h('div', { class: 'item' + (sub.enabled ? '' : ' off') },
+    return h('div', { class: 'item sub' + (sub.enabled ? '' : ' off') },
       h('div', { class: 'prio' }, '·'),
       h('div', {},
         h('div', { class: 'item-name' }, sub.name),
@@ -1251,8 +1287,10 @@ async function renderSettings() {
     ANDROID ? null : h('h2', {}, 'Обновление Лазейки'),
     ANDROID ? null : selfUpdatePanel(self),
     ANDROID ? null : defenderPanel(def),
-    h('h2', {}, 'Панель слева'),
-    h('p', { class: 'hint' }, 'Переключатели VPN и zapret видны на любой вкладке. Здесь — что показывать под ними.'),
+    h('h2', {}, PHONE.matches ? 'Панель сверху' : 'Панель слева'),
+    h('p', { class: 'hint' }, PHONE.matches
+      ? 'Переключатели VPN и zapret видны на любой вкладке, а под ними на вкладке «Маршрут» — то, что выбрано здесь.'
+      : 'Переключатели VPN и zapret видны на любой вкладке. Здесь — что показывать под ними.'),
     h('div', { class: 'panel' },
       sw('Выбор сервера', 'Через какой сервер идёт заблокированное.', !ui.hide_server, v => uiSet({ hide_server: !v })),
       sw('Страна выхода', 'Определяется через страницу Cloudflare тем же путём, что и заблокированное.', !ui.hide_country, v => uiSet({ hide_country: !v })),
