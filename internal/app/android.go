@@ -450,3 +450,67 @@ func (a *App) dnsReport() {
 		logx.Warnf("DNS через TCP не отвечает: без серверов YouTube и Discord не откроются (%v)", terr)
 	}
 }
+
+var loopWarned bool
+
+// loopProbe checks whether Лазейка's own traffic (the core, mihomo, ByeDPI —
+// all outside the VPN by design) comes back into its VPN. TEST-NET-1 has no
+// hosts: a TCP handshake with it can only be completed by our own VPN stack,
+// a UDP packet to it shows up among mihomo's connections only if it went
+// through the VPN, and a made-up name gets an address only from mihomo's DNS.
+func (a *App) loopProbe(api *core.API) {
+	select {
+	case <-a.ctx.Done():
+		return
+	case <-time.After(2 * time.Second):
+	}
+	const probeIP = "192.0.2.77"
+	tcpLoop := false
+	if c, err := net.DialTimeout("tcp", net.JoinHostPort(probeIP, "33434"), 1500*time.Millisecond); err == nil {
+		tcpLoop = true
+		c.Close()
+	}
+	udpLoop := false
+	if u, err := net.Dial("udp", net.JoinHostPort(probeIP, "33433")); err == nil {
+		for i := 0; i < 3; i++ {
+			u.Write([]byte("lazeyka loop probe"))
+			time.Sleep(150 * time.Millisecond)
+		}
+		ctx, cancel := context.WithTimeout(a.ctx, 3*time.Second)
+		udpLoop, _ = api.HasConnectionTo(ctx, "udp", probeIP, 33433)
+		cancel()
+		u.Close()
+	}
+	dnsLoop := false
+	name := fmt.Sprintf("lz-probe-%d.invalid", time.Now().UnixNano()%1e9)
+	r := &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "udp", "77.88.8.8:53")
+	}}
+	ctx, cancel := context.WithTimeout(a.ctx, 4*time.Second)
+	if ips, err := r.LookupNetIP(ctx, "ip4", name); err == nil {
+		for _, ip := range ips {
+			if netip.MustParsePrefix("198.18.0.0/15").Contains(ip) {
+				dnsLoop = true
+			}
+		}
+	}
+	cancel()
+	mark := func(loop bool) string {
+		if loop {
+			return "через VPN Лазейки (петля)"
+		}
+		return "мимо VPN"
+	}
+	logx.Infof("проверка петли: TCP %s, UDP %s, DNS по UDP %s", mark(tcpLoop), mark(udpLoop), mark(dnsLoop))
+	switch {
+	case tcpLoop || udpLoop:
+		logx.Errorf("соединения самой Лазейки возвращаются в её VPN: Android не исключил приложение из VPN")
+		if !loopWarned {
+			loopWarned = true
+			a.notify("Лазейка: петля в VPN", "Соединения самой Лазейки попадают в её же VPN. Пришлите журнал разработчику.", true)
+		}
+	case dnsLoop:
+		logx.Infof("система перехватывает DNS по UDP и отвечает через VPN; Лазейка поэтому спрашивает DNS только по TCP")
+	}
+}

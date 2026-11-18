@@ -414,6 +414,33 @@ func DefaultRoutes(exclude string) []RouteIface {
 	return defaultRoutes(ipv4Routes(), skip, interfaceInfo, interfaceMetric)
 }
 
+// BindDialer makes d's connections leave by the network card ifIdx and not
+// by the VPN's tunnel, the way mihomo sends its own (IP_UNICAST_IF). The
+// strict route lets such connections out, except DNS on port 53.
+func BindDialer(d *net.Dialer, ifIdx int) {
+	if ifIdx <= 0 {
+		return
+	}
+	const ipUnicastIf, ipv6UnicastIf = 31, 31
+	d.Control = func(network, address string, c syscall.RawConn) error {
+		var serr error
+		err := c.Control(func(fd uintptr) {
+			h := syscall.Handle(fd)
+			if strings.HasSuffix(network, "6") {
+				serr = syscall.SetsockoptInt(h, syscall.IPPROTO_IPV6, ipv6UnicastIf, ifIdx)
+				return
+			}
+			var b [4]byte
+			binary.BigEndian.PutUint32(b[:], uint32(ifIdx))
+			serr = syscall.SetsockoptInt(h, syscall.IPPROTO_IP, ipUnicastIf, int(*(*uint32)(unsafe.Pointer(&b[0]))))
+		})
+		if err != nil {
+			return err
+		}
+		return serr
+	}
+}
+
 // DefaultRouteIfIndex returns the interface mihomo binds the VPN's own
 // connections to: the best default route that is not a VPN adapter (the same
 // choice mihomo's "auto-detect-interface" makes), ignoring our TUN.

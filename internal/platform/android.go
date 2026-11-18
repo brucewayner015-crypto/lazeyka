@@ -84,8 +84,10 @@ func init() {
 			list := append([]string{}, dnsServers...)
 			dnsMu.Unlock()
 			for _, s := range list {
+				// TCP as well: UDP DNS may be caught by the system and
+				// answered through our own VPN (fake 198.18.x addresses)
 				dctx, cancel := context.WithTimeout(ctx, 3*time.Second)
-				c, err := d.DialContext(dctx, network, s)
+				c, err := d.DialContext(dctx, "tcp", s)
 				cancel()
 				if err == nil {
 					return c, nil
@@ -154,6 +156,10 @@ func CurrentUserSID() (string, error) { return fmt.Sprint(os.Getuid()), nil }
 
 func DefaultRouteIfIndex(exclude string) int    { return 0 }
 func DefaultRoutes(exclude string) []RouteIface { return nil }
+
+// BindDialer: nothing to do, the app is excluded from its own VPN.
+func BindDialer(d *net.Dialer, ifIdx int) {}
+
 func SetHostFlags(ifIdx int, forwarding, weakSend *bool) error {
 	return errors.New("not supported on Android")
 }

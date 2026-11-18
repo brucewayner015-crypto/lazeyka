@@ -104,9 +104,14 @@ function fmtBytes(n) {
   return (n / 1073741824).toFixed(1).replace('.', ',') + ' ГБ';
 }
 // A server mihomo has not checked yet has no delay but is not dead: alive
-// turns false only after a failed check.
-function delayEl(d, alive) {
-  if (!d && alive === false) return h('span', { class: 'delay dead' }, 'нет ответа');
+// turns false only after a failed check. For a dead server the core says
+// why, after connecting to it directly: "недоступен" (no connection from
+// this network), "блокируется" (TLS cut: DPI), "нет ответа" (the server is
+// there, the VPN through it fails).
+function deadText(n) { return (n && n.reach_text) || 'нет ответа'; }
+function deadTitle(n) { return (n && n.reach_note) || 'Проверка через сервер не прошла'; }
+function delayEl(d, alive, n) {
+  if (!d && alive === false) return h('span', { class: 'delay dead', title: deadTitle(n) }, deadText(n));
   if (!d) return h('span', { class: 'delay', title: 'Ещё не проверялся' }, '—');
   const cls = d < 300 ? 'good' : d < 800 ? 'slow' : 'dead';
   return h('span', { class: 'delay ' + cls }, d + ' мс');
@@ -322,7 +327,7 @@ function blockedLabel(o, short) {
   if (o.name === 'OWN') return 'Любой свой сервер';
   if (o.name === 'SUB') return 'Любой из подписки';
   if (o.name === 'DIRECT') return 'Напрямую (не обходить)';
-  return o.label + (o.delay ? '  ' + o.delay + ' мс' : o.alive === false ? '  нет ответа' : '');
+  return o.label + (o.delay ? '  ' + o.delay + ' мс' : o.alive === false ? '  ' + deadText(o) : '');
 }
 
 // The server for blocked sites (the BLOCKED group): general choices, then
@@ -335,6 +340,10 @@ function blockedSelect(blocked, attrs, compact, noDelay) {
     if (o.kind === 'reject') continue;
     (o.kind === 'own' ? own : o.kind === 'sub' ? sub : fixed).push(o);
   }
+  // the subscription's servers: answering first (fastest on top), then
+  // not yet checked, then dead; own servers keep their priority order
+  const rank = o => o.delay ? 0 : o.alive === false ? 2 : 1;
+  sub.sort((a, b) => rank(a) - rank(b) || (a.delay || 0) - (b.delay || 0));
   const opt = o => {
     const chosen = o.name === blocked.now;
     return h('option', { value: o.name, selected: chosen ? true : undefined }, noDelay && chosen && (o.kind === 'own' || o.kind === 'sub') ? o.label : blockedLabel(o, compact));
@@ -632,7 +641,7 @@ function quickVPN(st, ui, blocked) {
     const exit = blocked.exit;
     const opt = blocked.options.find(o => o.name === exit);
     const ping = !ui.hide_ping && opt && exit !== 'DIRECT' && (opt.delay || opt.alive === false)
-      ? h('span', { class: delayClass(opt.delay) }, opt.delay ? opt.delay + ' мс' : 'нет ответа') : null;
+      ? h('span', { class: delayClass(opt.delay), title: opt.delay ? undefined : deadTitle(opt) }, opt.delay ? opt.delay + ' мс' : deadText(opt)) : null;
     let country = null;
     if (exit === 'DIRECT') country = 'напрямую, без сервера';
     else if (!ui.hide_country) {
@@ -738,7 +747,7 @@ function renderQuick() {
   const zt = (st.jobs || {})['zapret-test'];
   const sig = JSON.stringify([st.vpn, st.vpn_broken, st.vpn_warn, st.has_vpn, st.zapret, st.zapret_enabled, st.strategy,
     zt && zt.running ? Math.round((zt.progress || 0) * 50) : -1,
-    blocked ? [blocked.now, blocked.exit, blocked.options.map(o => o.name + ':' + o.delay + ':' + o.alive)] : null,
+    blocked ? [blocked.now, blocked.exit, blocked.options.map(o => o.name + ':' + o.delay + ':' + o.alive + ':' + (o.reach || ''))] : null,
     S.exit ? [S.exit.node, S.exit.country, S.exit.pending] : null,
     zs ? [zs.installed, zs.current, (zs.list || []).map(r => r.file + ':' + r.ok + ':' + r.checked)] : null,
     ui, (set.routing || {}).blocked_select]);
@@ -761,6 +770,22 @@ function renderQuick() {
 
 /* ---------- servers ---------------------------------------------------------- */
 
+// Why a subscription's servers do not answer (the core has connected to
+// each dead one directly; see reach.go): one line per reason.
+function reachNote(nodes) {
+  const count = code => nodes.filter(n => !n.delay && n.alive === false && n.reach === code).length;
+  const off = count('unreachable'), dpi = count('dpi'), open = count('open');
+  const srv = n => n + ' ' + plural(n, 'сервер', 'сервера', 'серверов');
+  const out = [];
+  if (off) out.push(srv(off) + ' ' + plural(off, 'не открывается', 'не открываются', 'не открываются') + ' из вашей сети даже напрямую: адрес заблокирован провайдером или сервер выключен.');
+  if (dpi) out.push(srv(dpi) + ': подключение есть, но провайдер обрывает защищённое соединение — блокирует протокол.');
+  if (open) out.push(srv(open) + ' ' + plural(open, 'доступен', 'доступны', 'доступны') + ', но VPN через ' + plural(open, 'него', 'них', 'них') + ' не работает: обновите подписку; не поможет — проблема у сервера.');
+  if (!out.length) return null;
+  return h('div', { class: 'item-note' },
+    out.map(l => h('div', {}, l)),
+    h('div', {}, 'Лазейка это не исправит: выберите сервер, который отвечает, или попросите у владельца подписки другие адреса.'));
+}
+
 async function renderServers() {
   const root = $('#tab-servers');
   S.settings = await api('settings');
@@ -777,7 +802,7 @@ async function renderServers() {
         h('div', { class: 'item-name' }, s.name, nodes && nodes.active === (nv && nv.name) ? h('span', { class: 'item-meta' }, '  сейчас используется') : null),
         h('div', { class: 'item-meta' }, s.info + ', ' + s.host + ':' + s.port + (s.source ? ', из: ' + s.source : ''))),
       h('div', { class: 'item-side' },
-        nv ? delayEl(nv.delay, nv.alive) : null,
+        nv ? delayEl(nv.delay, nv.alive, nv) : null,
         h('button', { class: 'btn mini', title: 'Поднять приоритет', disabled: i === 0, onclick: () => patchServer({ id: s.id, move: -1 }) }, 'Выше'),
         h('button', { class: 'btn mini', title: 'Опустить приоритет', disabled: i === set.servers.length - 1, onclick: () => patchServer({ id: s.id, move: 1 }) }, 'Ниже'),
         h('button', { class: 'btn mini', onclick: () => patchServer({ id: s.id, enabled: !s.enabled }) }, s.enabled ? 'Отключить' : 'Включить'),
@@ -816,7 +841,8 @@ async function renderServers() {
           h('label', { class: 'switch inline', title: 'Если адрес подписки заблокирован провайдером' }, h('input', { type: 'checkbox', checked: sub.via_vpn, onchange: e => patchSub({ id: sub.id, via_vpn: e.target.checked }) }), 'Скачивать через свой сервер')),
         sv && sv.nodes.length ? h('details', {},
           h('summary', { class: 'item-meta', style: 'cursor:pointer' }, 'Серверы подписки'),
-          h('div', { class: 'nodes' }, sv.nodes.map(n => h('div', {}, h('span', {}, n.name), delayEl(n.delay, n.alive))))) : null,
+          h('div', { class: 'nodes' }, sv.nodes.map(n => h('div', {}, h('span', {}, n.name), delayEl(n.delay, n.alive, n))))) : null,
+        sv ? reachNote(sv.nodes) : null,
         subSettings(sub)),
       h('div', { class: 'item-side' },
         h('button', { class: 'btn mini', disabled: !nodes, onclick: async () => { await act(() => api('subs/refresh', { id: sub.id }), 'Подписка обновлена'); renderServers(); } }, 'Обновить'),

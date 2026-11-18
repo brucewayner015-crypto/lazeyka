@@ -63,7 +63,7 @@ func serverItems(g GroupView) []platform.TrayItem {
 		case "reject":
 			continue
 		case "own", "sub":
-			it.Note = delayNote(o.Delay, o.Alive)
+			it.Note = delayNote(o.Delay, o.Alive, o.ReachText)
 			if o.Kind == "own" {
 				own = append(own, it)
 			} else {
@@ -108,10 +108,12 @@ func choiceLabel(name string) string {
 	return ""
 }
 
-func delayNote(d int, alive bool) string {
+func delayNote(d int, alive bool, dead string) string {
 	switch {
 	case d > 0:
 		return fmt.Sprintf("%d мс", d)
+	case !alive && dead != "":
+		return dead // "недоступен", "блокируется" (reach.go)
 	case !alive:
 		return "нет ответа"
 	}

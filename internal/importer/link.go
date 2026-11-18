@@ -53,6 +53,30 @@ type LinkInfo struct {
 	Transport string
 	Security  string
 	Flow      string
+	SNI       string // the TLS server name the client sends ("" = none or the host)
+}
+
+// OverUDP: the protocol runs over UDP (QUIC or WireGuard), so a TCP
+// connection to the server says nothing about it.
+func (li LinkInfo) OverUDP() bool {
+	switch li.Proto {
+	case "Hysteria", "Hysteria2", "TUIC", "WireGuard", "AmneziaWG":
+		return true
+	}
+	return false
+}
+
+// UsesTLS: the client opens the connection with a TLS handshake (TLS,
+// Reality, Trojan), so the server must answer one.
+func (li LinkInfo) UsesTLS() bool {
+	if li.OverUDP() {
+		return false
+	}
+	switch li.Security {
+	case "tls", "xtls", "reality":
+		return true
+	}
+	return li.Proto == "Trojan" || li.Proto == "AnyTLS"
 }
 
 // Summary returns "VLESS · XHTTP · Reality".
@@ -93,6 +117,10 @@ func InspectLink(link string) (LinkInfo, error) {
 			li.Port = atoiAny(v["port"])
 			li.Transport = strings.ToLower(str(v["net"]))
 			li.Security = strings.ToLower(str(v["tls"]))
+			li.SNI = str(v["sni"])
+			if li.SNI == "" && li.Security == "tls" {
+				li.SNI = str(v["host"])
+			}
 			if li.Host == "" || li.Port == 0 {
 				return li, errf("в ссылке VMess нет адреса сервера")
 			}
@@ -133,6 +161,12 @@ func InspectLink(link string) (LinkInfo, error) {
 	li.Transport = strings.ToLower(q.Get("type"))
 	li.Security = strings.ToLower(q.Get("security"))
 	li.Flow = strings.ToLower(q.Get("flow"))
+	for _, k := range []string{"sni", "peer", "serverName", "servername"} {
+		if v := q.Get(k); v != "" {
+			li.SNI = v
+			break
+		}
+	}
 	if scheme == "trojan" && li.Security == "" {
 		li.Security = "tls"
 	}

@@ -135,8 +135,12 @@ func (a *App) connectLocked() error {
 	a.setVPN("on", "")
 	a.startTraffic(api)
 	if !b.HasVPN {
-		logx.Warnf("VPN включён без серверов: работает только маршрутизация и zapret")
+		logx.Warnf("VPN включён без серверов: работает только маршрутизация и %s", dpiName())
 	}
+	if platform.IsAndroid {
+		go a.loopProbe(api)
+	}
+	go a.reachAfterConnect(api, b)
 	if d := a.netDiag(); d != "" {
 		logx.Infof("%s", d)
 	}
@@ -509,11 +513,14 @@ func (a *App) onMihomoExit(err error, uptime time.Duration, lastErr string) {
 
 // OptionView is a selectable member of a group.
 type OptionView struct {
-	Name  string `json:"name"`
-	Label string `json:"label"`
-	Kind  string `json:"kind"` // group | own | sub | direct | reject
-	Delay int    `json:"delay"`
-	Alive bool   `json:"alive"`
+	Name      string `json:"name"`
+	Label     string `json:"label"`
+	Kind      string `json:"kind"` // group | own | sub | direct | reject
+	Delay     int    `json:"delay"`
+	Alive     bool   `json:"alive"`
+	Reach     string `json:"reach,omitempty"`      // why a dead server failed (reach.go)
+	ReachText string `json:"reach_text,omitempty"` // "недоступен", "блокируется", "нет ответа"
+	ReachNote string `json:"reach_note,omitempty"`
 }
 
 // GroupView is a routing group.
@@ -578,7 +585,7 @@ func (a *App) groups(timeout time.Duration) ([]GroupView, error) {
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, timeout)
 	defer cancel()
-	proxies, err := api.Proxies(ctx)
+	proxies, err := api.AllProxies(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -599,6 +606,10 @@ func (a *App) groups(timeout time.Duration) ([]GroupView, error) {
 			o := OptionView{
 				Name: m, Label: labelOf(m), Kind: kindOf(m, mp, own),
 				Delay: mp.LastDelay(), Alive: mp.Alive,
+			}
+			if (o.Kind == "own" || o.Kind == "sub") && o.Delay == 0 && !o.Alive {
+				r := a.reachOf(m)
+				o.Reach, o.ReachText, o.ReachNote = r.Code, r.Text, r.Note
 			}
 			if (o.Kind == "own" || o.Kind == "sub") && len(mp.History) == 0 {
 				untested++
@@ -695,12 +706,24 @@ func (a *App) Select(group, name string) error {
 
 // NodeView is a server node with health info.
 type NodeView struct {
-	ServerID string `json:"server_id,omitempty"`
-	Name     string `json:"name"`
-	Delay    int    `json:"delay"`
-	Alive    bool   `json:"alive"`
-	UDP      bool   `json:"udp"`
-	Type     string `json:"type"`
+	ServerID  string `json:"server_id,omitempty"`
+	Name      string `json:"name"`
+	Delay     int    `json:"delay"`
+	Alive     bool   `json:"alive"`
+	UDP       bool   `json:"udp"`
+	Type      string `json:"type"`
+	Reach     string `json:"reach,omitempty"` // why a dead server failed (reach.go)
+	ReachText string `json:"reach_text,omitempty"`
+	ReachNote string `json:"reach_note,omitempty"`
+}
+
+func (a *App) nodeView(serverID string, p core.ProxyInfo) NodeView {
+	v := NodeView{ServerID: serverID, Name: p.Name, Delay: p.LastDelay(), Alive: p.Alive, UDP: p.UDP, Type: p.Type}
+	if v.Delay == 0 && !v.Alive {
+		r := a.reachOf(p.Name)
+		v.Reach, v.ReachText, v.ReachNote = r.Code, r.Text, r.Note
+	}
+	return v
 }
 
 // SubView is a subscription's live state.
@@ -726,7 +749,7 @@ func (a *App) Nodes() (NodesView, error) {
 	}
 	ctx, cancel := context.WithTimeout(a.ctx, 6*time.Second)
 	defer cancel()
-	proxies, err := api.Proxies(ctx)
+	proxies, err := api.AllProxies(ctx)
 	if err != nil {
 		return NodesView{}, err
 	}
@@ -738,7 +761,8 @@ func (a *App) Nodes() (NodesView, error) {
 			continue
 		}
 		untested = untested || len(p.History) == 0
-		view.Own[id] = NodeView{ServerID: id, Name: name, Delay: p.LastDelay(), Alive: p.Alive, UDP: p.UDP, Type: p.Type}
+		p.Name = name
+		view.Own[id] = a.nodeView(id, p)
 	}
 	provs, err := api.Providers(ctx)
 	if err == nil {
@@ -750,7 +774,7 @@ func (a *App) Nodes() (NodesView, error) {
 			sv := SubView{ID: subID, UpdatedAt: pv.UpdatedAt, Info: pv.SubscriptionInfo, Nodes: []NodeView{}}
 			for _, n := range pv.Proxies {
 				untested = untested || len(n.History) == 0
-				sv.Nodes = append(sv.Nodes, NodeView{Name: n.Name, Delay: n.LastDelay(), Alive: n.Alive, UDP: n.UDP, Type: n.Type})
+				sv.Nodes = append(sv.Nodes, a.nodeView("", n))
 			}
 			sort.SliceStable(sv.Nodes, func(i, j int) bool {
 				di, dj := sv.Nodes[i].Delay, sv.Nodes[j].Delay
@@ -774,18 +798,20 @@ func (a *App) TestDelays() error {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(a.ctx, 20*time.Second)
+	ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
 	defer cancel()
 	var wg sync.WaitGroup
 	for _, name := range b.NodeName {
 		wg.Add(1)
-		go func(n string) { defer wg.Done(); api.Delay(ctx, n, core.HealthURL, 5000) }(name)
+		go func(n string) { defer wg.Done(); api.Delay(ctx, n, core.HealthURL, core.HealthTimeout) }(name)
 	}
 	for _, pname := range b.SubProvider {
 		wg.Add(1)
 		go func(n string) { defer wg.Done(); api.HealthCheckProvider(ctx, n) }(pname)
 	}
 	wg.Wait()
+	// and why the dead ones are dead
+	a.probeDead(a.ctx, api, b, true)
 	return nil
 }
 

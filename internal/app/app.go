@@ -27,7 +27,7 @@ import (
 )
 
 // Version of the app.
-var Version = "0.2.3"
+var Version = "0.2.4"
 
 // TunName is the TUN adapter name.
 const TunName = "Lazeyka"
@@ -121,6 +121,8 @@ type App struct {
 	exit         exitState // country of the blocked-sites exit
 	autoTestAt   time.Time // last check of untested servers
 	autoTesting  bool
+	reach        map[string]reachInfo // why servers failed mihomo's check (reach.go)
+	reachLogged  string
 	defender     DefenderView
 	defenderBusy bool
 	self         SelfUpdateView // the last check for a newer Лазейка

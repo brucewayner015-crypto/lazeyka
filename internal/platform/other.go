@@ -4,6 +4,7 @@ package platform
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -53,6 +54,10 @@ func DefaultRouteIfIndex(exclude string) int { return 0 }
 
 // DefaultRoutes: Windows only.
 func DefaultRoutes(exclude string) []RouteIface { return nil }
+
+// BindDialer: Windows only (elsewhere the app's own connections already
+// leave past the VPN).
+func BindDialer(d *net.Dialer, ifIdx int) {}
 
 // SetHostFlags: Windows only.
 func SetHostFlags(ifIdx int, forwarding, weakSend *bool) error {

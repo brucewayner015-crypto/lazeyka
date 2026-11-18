@@ -56,6 +56,11 @@ var reservedNames = map[string]bool{
 // HealthURL is used by every group and provider health check.
 const HealthURL = "https://www.gstatic.com/generate_204"
 
+// HealthTimeout (ms) for checking one server. Generous: on mobile networks
+// in Russia the first connection through a server often takes 3–5 s
+// (throttled handshakes), and 4 s marked working servers dead.
+const HealthTimeout = 6000
+
 // SubPrefix is the default label before subscription server names, so they
 // do not collide with the user's own server names.
 const SubPrefix = settings.DefaultSubPrefix
@@ -242,7 +247,7 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 		return name
 	}
 	hc := func(interval int, lazy bool) omap.M {
-		return omap.New("enable", true, "url", HealthURL, "interval", interval, "timeout", 4000, "lazy", lazy, "expected-status", "204")
+		return omap.New("enable", true, "url", HealthURL, "interval", interval, "timeout", HealthTimeout, "lazy", lazy, "expected-status", "204")
 	}
 	idx := 0
 	for _, srv := range s.Servers {
@@ -379,7 +384,7 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 	if b.HasSub {
 		groups = append(groups, omap.New(
 			"name", GSub, "type", "url-test", "use", subProviders,
-			"url", HealthURL, "expected-status", "204", "interval", 600, "timeout", 5000,
+			"url", HealthURL, "expected-status", "204", "interval", 600, "timeout", HealthTimeout,
 			"tolerance", 120, "lazy", true,
 		))
 	}
@@ -580,7 +585,11 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 		"default-nameserver", append([]string{}, TrustedDNS...),
 		"proxy-server-nameserver", append([]string{}, TrustedDNS...),
 		"nameserver", nameservers,
-		"nameserver-policy", omap.New("rule-set:ru-domains,ru-outside", []string{"77.88.8.8", "77.88.8.1"}),
+		// Yandex over TCP too: on some phones (seen on OnePlus, Android 16)
+		// the system catches UDP DNS of every app, the VPN's own included,
+		// and answers it through the VPN — mihomo then got its own fake
+		// addresses back (yandex.ru → 198.18.0.84) and Russian sites hung
+		"nameserver-policy", omap.New("rule-set:ru-domains,ru-outside", []string{"tcp://77.88.8.8", "tcp://77.88.8.1"}),
 	)
 
 	// --- TUN -----------------------------------------------------------------
@@ -661,8 +670,10 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 			"override-destination", false,
 			"sniff", omap.New(
 				"HTTP", omap.New("ports", []any{80, "8080-8880"}, "override-destination", false),
-				"TLS", omap.New("ports", []any{443, 8443}),
-				"QUIC", omap.New("ports", []any{443, 8443}),
+				// Android: apps reach some sites by IPv6 address, and IPv6 is
+				// off in the VPN; dialled by the name from TLS they work
+				"TLS", omap.New("ports", []any{443, 8443}, "override-destination", rt.Android),
+				"QUIC", omap.New("ports", []any{443, 8443}, "override-destination", rt.Android),
 			),
 		)},
 		omap.KV{K: "tun", V: tun},

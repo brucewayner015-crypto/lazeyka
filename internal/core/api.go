@@ -9,7 +9,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -117,6 +119,38 @@ func (a *API) Proxies(ctx context.Context) (map[string]ProxyInfo, error) {
 	return v.Proxies, err
 }
 
+// AllProxies is Proxies plus the servers inside providers. mihomo's /proxies
+// lists only the proxies and groups written in the config itself; every
+// server of Лазейка (own ones and subscriptions alike) lives in a provider,
+// so its checks are only visible through /providers/proxies. Without them a
+// group's servers all look dead ("нет ответа" for every one).
+func (a *API) AllProxies(ctx context.Context) (map[string]ProxyInfo, error) {
+	proxies, err := a.Proxies(ctx)
+	if err != nil {
+		return nil, err
+	}
+	provs, err := a.Providers(ctx)
+	if err != nil {
+		return proxies, nil // groups still work; servers show as unchecked
+	}
+	if proxies == nil {
+		proxies = map[string]ProxyInfo{}
+	}
+	names := make([]string, 0, len(provs))
+	for name := range provs {
+		names = append(names, name)
+	}
+	sort.Strings(names) // the same server name in two providers: a stable pick
+	for _, name := range names {
+		for _, p := range provs[name].Proxies {
+			if _, ok := proxies[p.Name]; !ok {
+				proxies[p.Name] = p
+			}
+		}
+	}
+	return proxies, nil
+}
+
 // Select chooses name inside a select group.
 func (a *API) Select(ctx context.Context, group, name string) error {
 	return a.do(ctx, http.MethodPut, "/proxies/"+url.PathEscape(group), map[string]string{"name": name}, nil)
@@ -221,6 +255,59 @@ func (a *API) Connections(ctx context.Context) (Totals, error) {
 	}
 	err := a.do(ctx, http.MethodGet, "/connections", nil, &v)
 	return Totals{Up: v.Up, Down: v.Down, Conns: len(v.Connections)}, err
+}
+
+// HasConnectionTo reports whether mihomo has a connection to ip:port over
+// network ("tcp" or "udp").
+func (a *API) HasConnectionTo(ctx context.Context, network, ip string, port int) (bool, error) {
+	var v struct {
+		Connections []struct {
+			Metadata struct {
+				Network string `json:"network"`
+				DstIP   string `json:"destinationIP"`
+				DstPort string `json:"destinationPort"`
+			} `json:"metadata"`
+		} `json:"connections"`
+	}
+	if err := a.do(ctx, http.MethodGet, "/connections", nil, &v); err != nil {
+		return false, err
+	}
+	for _, c := range v.Connections {
+		if strings.EqualFold(c.Metadata.Network, network) && c.Metadata.DstIP == ip && c.Metadata.DstPort == strconv.Itoa(port) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// LookupIPv4 asks mihomo's own resolver (real addresses, never fake-ip). The
+// app cannot always ask DNS itself: on Windows the TUN's strict route blocks
+// port 53 for everyone but mihomo.
+func (a *API) LookupIPv4(ctx context.Context, host string) ([]string, error) {
+	var v struct {
+		Status int `json:"Status"`
+		Answer []struct {
+			Type int    `json:"type"`
+			Data string `json:"data"`
+		} `json:"Answer"`
+	}
+	q := url.Values{"name": {host}, "type": {"A"}}
+	if err := a.do(ctx, http.MethodGet, "/dns/query?"+q.Encode(), nil, &v); err != nil {
+		return nil, err
+	}
+	var ips []string
+	for _, an := range v.Answer {
+		if an.Type == 1 { // A
+			ips = append(ips, strings.TrimSpace(an.Data))
+		}
+	}
+	if len(ips) == 0 {
+		if v.Status == 3 {
+			return nil, fmt.Errorf("имя %s не существует", host)
+		}
+		return nil, fmt.Errorf("для %s нет адреса IPv4", host)
+	}
+	return ips, nil
 }
 
 // StreamTraffic calls fn every second with current up/down speeds until ctx ends.
