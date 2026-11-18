@@ -145,8 +145,9 @@ function brief(s) {
   return cut.length > 110 ? cut.slice(0, 108) + '…' : cut;
 }
 // text with clickable https links (they open in the regular browser)
+// https:// addresses become links; a full stop or bracket after one is text
 function linkify(s) {
-  return String(s || '').split(/(https:\/\/[^\s«»"]+)/).map((part, i) =>
+  return String(s || '').split(/(https:\/\/[^\s«»"<>]*[^\s«»"<>.,;:!?)])/).map((part, i) =>
     i % 2 ? h('a', { href: part, target: '_blank', rel: 'noopener' }, part) : part);
 }
 function unlines(text) { return text.split('\n').map(s => s.trim()).filter(Boolean); }
@@ -318,7 +319,7 @@ function importBox(onAdded) {
     }, 'Добавить выбранное');
     put(out,
       items.length ? h('div', { class: 'list preview', style: 'margin-top:12px' }, rows) : null,
-      r.errors && r.errors.length ? h('ul', { class: 'errors' }, r.errors.map(e => h('li', {}, e))) : null,
+      r.errors && r.errors.length ? h('ul', { class: 'errors' }, r.errors.map(e => h('li', {}, linkify(e)))) : null,
       items.length ? h('div', { class: 'row-actions', style: 'margin-top:12px' }, add) : null,
     );
   }

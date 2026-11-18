@@ -432,6 +432,8 @@ body.android .brand { display: none; }
   .qp { gap: 8px 14px; padding: 4px 0 8px; margin-bottom: 0; border-bottom: none; }
   .qp.phone { grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 6px 0 10px; }
   .qp-cards { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px 16px; }
+  .qp-cards .qp-row { flex-wrap: wrap; column-gap: 8px; row-gap: 0; }
+  .qp-cards .qp-row > span { white-space: normal; overflow: visible; }
   .qp-head { min-height: 38px; }
   .qp-knob { width: 40px; height: 22px; border-radius: 11px; }
   .qp-knob::after { width: 15px; height: 15px; }

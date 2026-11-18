@@ -151,7 +151,31 @@ func parseJSON(data []byte, base string) Result {
 	if cfg, ok := probe["config"].(string); ok && IsAWGConf(cfg) { // bare Amnezia last_config
 		return Parse(cfg, base)
 	}
+	if probe["auth_data"] != nil || probe["api_config"] != nil || probe["api_key"] != nil || probe["api_endpoint"] != nil {
+		return Result{Errors: []string{amneziaServiceKey(probe)}}
+	}
 	return Result{Errors: []string{"неизвестный формат JSON: ожидается конфиг Xray или AmneziaVPN"}}
+}
+
+// amneziaServiceKey explains a vpn:// key of the Amnezia Premium or Free
+// service. Such a key holds no server: only an access key that the
+// AmneziaVPN and DefaultVPN apps trade for settings over Amnezia's own
+// encrypted API. For other programs Amnezia hands out ready AmneziaWG files
+// in the Premium personal account, where the same key is the login.
+func amneziaServiceKey(probe map[string]any) string {
+	service := ""
+	if ac, ok := probe["api_config"].(map[string]any); ok {
+		service = strings.ToLower(str(ac["service_type"]))
+	}
+	if strings.Contains(service, "free") || strings.Contains(strings.ToLower(str(probe["name"])), "free") {
+		return "Это ключ Amnezia Free: сервера в нём нет, только ключ к службе Amnezia, с которой работает лишь приложение AmneziaVPN. " +
+			"Файлов конфигурации для других программ у Amnezia Free нет."
+	}
+	return "Это ключ подписки Amnezia Premium: сервера в нём нет, только ключ к службе Amnezia, с которой работают лишь приложения AmneziaVPN и DefaultVPN. " +
+		"Для Лазейки нужен файл AmneziaWG: войдите этим ключом в личный кабинет https://cp.amnezia.org/ru " +
+		"(не открывается — зеркало https://storage.googleapis.com/amnezia/cp?m-path=/ru), откройте «Файлы конфигурации», " +
+		"выберите локацию, нажмите «Получить новый» и добавьте сюда полученный файл .conf («Открыть файл…»). " +
+		"Каждый файл занимает одно из 7 подключений подписки; на каждое устройство — своя локация, один файл на двух устройствах не работает."
 }
 
 func linkItem(link, source string) (Item, error) {

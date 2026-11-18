@@ -241,3 +241,22 @@ func TestAWGTogglesAsAmneziaWritesThem(t *testing.T) {
 		t.Fatal(opt, info)
 	}
 }
+
+// A vpn:// key of the Amnezia service (no server inside): a clear way out
+// instead of "unknown JSON".
+func TestAmneziaServiceKey(t *testing.T) {
+	for _, c := range []struct{ json, want, not string }{
+		{`{"name":"Amnezia Premium","description":"Amnezia Premium","config_version":2,"api_config":{"service_type":"amnezia-premium","service_protocol":"awg","user_country_code":"ru"},"auth_data":{"api_key":"test-key-not-real"}}`,
+			"cp.amnezia.org", "Free"},
+		{`{"name":"Amnezia Free","config_version":2,"api_config":{"service_type":"amnezia-free","service_protocol":"awg"},"auth_data":{"api_key":"x"}}`,
+			"Amnezia Free", "cp.amnezia.org"},
+		{`{"config_version":1,"api_endpoint":"https://example.invalid/","api_key":"x","name":"Old free"}`,
+			"Amnezia", "неизвестный"},
+	} {
+		link := "vpn://" + base64.RawURLEncoding.EncodeToString(qCompress([]byte(c.json)))
+		r := Parse(link, "")
+		if len(r.Items) != 0 || len(r.Errors) != 1 || !strings.Contains(r.Errors[0], c.want) || strings.Contains(r.Errors[0], c.not) {
+			t.Errorf("%s: %+v", c.json[:30], r)
+		}
+	}
+}
