@@ -25,7 +25,7 @@ import (
 )
 
 // Version of the app.
-var Version = "0.2.2"
+var Version = "0.2.3"
 
 // TunName is the TUN adapter name.
 const TunName = "Lazeyka"
@@ -226,7 +226,7 @@ func (a *App) Start(autostart bool) {
 	if platform.IsWindows && !a.Dev {
 		go func() {
 			time.Sleep(5 * time.Second)
-			a.applyDefender()
+			a.refreshDefender()
 		}()
 		go a.selfUpdateLoop()
 	}

@@ -1079,24 +1079,26 @@ function selfUpdatePanel(u) {
     h('div', { class: 'row-actions', style: 'margin-top:10px' },
       u.available ? h('button', { class: 'btn primary', disabled: running, onclick: startSelfUpdate }, running ? 'Обновляю…' : 'Обновить до ' + u.latest) : null,
       h('button', { class: 'btn', onclick: async () => { await act(() => api('selfupdate/check', {})); renderSettings(); tick(); } }, 'Проверить сейчас')),
-    h('p', { class: 'hint', style: 'margin:8px 0 0' }, 'Новая версия скачивается прямо в папку Лазейки и ставится сама: без предупреждений SmartScreen. Источник — github.com/brucewayner015-crypto/lazeyka.'));
+    h('p', { class: 'hint', style: 'margin:8px 0 0' }, 'Новая версия скачивается в папку Лазейки, сверяется по SHA-256 и ставится по кнопке. Источник — github.com/brucewayner015-crypto/lazeyka.'));
 }
 
-function defenderPanel(d, a) {
+function defenderPanel(d) {
   if (!d || !d.supported) return null;
+  const cmd = "Add-MpPreference -ExclusionPath 'C:\\ProgramData\\Lazeyka'";
   let state;
-  if (a.scan_by_defender) state = 'Защитник проверяет папку Лазейки, как любую другую.';
-  else if (!d.checked && !d.error) state = 'Проверяю…';
-  else if (d.error) state = h('span', { class: 'no' }, 'Защитник Windows не ответил: ' + d.error);
-  else if (!d.active) state = 'Защитник Windows сейчас не основной антивирус (' + (d.mode || 'пассивный режим') + '). Если ваш антивирус мешает Лазейке, добавьте C:\\ProgramData\\Lazeyka в исключения в нём.';
-  else if (d.excluded) state = 'Папка C:\\ProgramData\\Lazeyka в исключениях Защитника.';
-  else state = h('span', { class: 'no' }, 'Исключение пока не добавлено.');
+  if (!d.checked && !d.error) state = 'Проверяю…';
+  else if (d.error) state = h('span', { class: 'no' }, 'Защитник Windows не ответил (нужны права администратора): ' + d.error);
+  else if (!d.active) state = 'Защитник Windows сейчас не основной антивирус (' + (d.mode || 'пассивный режим') + '). Если ваш антивирус удаляет Лазейку или драйвер zapret, добавьте папку в исключения в нём.';
+  else if (d.excluded) state = h('span', { style: 'color:var(--spruce)' }, 'Папка C:\\ProgramData\\Lazeyka уже в исключениях Защитника.');
+  else state = 'Папка пока не в исключениях Защитника.';
+  const box = h('code', { style: 'flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font-family:ui-monospace,monospace;background:rgba(127,127,127,.14);padding:6px 10px;border-radius:7px' }, cmd);
   return [
     h('h2', {}, 'Защитник Windows'),
     h('div', { class: 'panel' },
-      sw('Не проверять папку Лазейки', 'Защитник иногда принимает Лазейку и драйвер zapret за вирус и удаляет их. Писать в эту папку могут только администраторы.',
-        !a.scan_by_defender, async v => { await act(() => api('app', { scan_by_defender: !v }), 'Сохранено'); setTimeout(renderSettings, 4000); }),
-      h('p', { class: 'hint', style: 'margin:8px 0 0' }, state)),
+      h('p', { class: 'hint', style: 'margin:0 0 10px' }, 'Защитник иногда принимает Лазейку и драйвер zapret (WinDivert) за вирус. Если это мешает — добавьте папку Лазейки в исключения сами: запустите PowerShell от имени администратора и выполните команду. Настройки антивируса Лазейка сама не меняет.'),
+      h('div', { style: 'display:flex;gap:8px;align-items:center' }, box,
+        h('button', { class: 'btn mini', onclick: () => navigator.clipboard.writeText(cmd).then(() => toast('Скопировано'), () => toast('Не удалось скопировать', true)) }, 'Копировать')),
+      h('p', { class: 'hint', style: 'margin:10px 0 0' }, state)),
   ];
 }
 
@@ -1135,7 +1137,7 @@ async function renderSettings() {
       sw('Проверять обновления', 'Лазейки — дважды в день, mihomo и zapret — раз в день, с GitHub.', a.check_updates, v => setApp('check_updates', v))),
     h('h2', {}, 'Обновление Лазейки'),
     selfUpdatePanel(self),
-    defenderPanel(def, a),
+    defenderPanel(def),
     h('h2', {}, 'Панель слева'),
     h('p', { class: 'hint' }, 'Переключатели VPN и zapret видны на любой вкладке. Здесь — что показывать под ними.'),
     h('div', { class: 'panel' },

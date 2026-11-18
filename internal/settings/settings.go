@@ -143,11 +143,6 @@ type App struct {
 	MihomoVersion  string `json:"mihomo_version"`
 	WasConnected   bool   `json:"was_connected"`
 	Onboarded      bool   `json:"onboarded"`
-	// ScanByDefender: let Microsoft Defender scan Лазейка's folder. Off by
-	// default: Лазейка adds its folder to Defender's exclusions, because
-	// Defender's machine-learning check takes it (and zapret's WinDivert
-	// driver) for malware.
-	ScanByDefender bool `json:"scan_by_defender"`
 }
 
 // Settings is the whole persistent state.

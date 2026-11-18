@@ -67,7 +67,6 @@ func main() {
 		_ = app.SignalInstance(p, "quit")
 		time.Sleep(2 * time.Second)
 		app.RemoveSystemBits()
-		app.RemoveDefenderExclusion(p)
 		msg := "Лазейка удалена."
 		if app.ScheduleDelete(p.Root, platform.UserUIDir()) > 0 {
 			msg += "\n\nНесколько занятых файлов исчезнут после перезагрузки компьютера."

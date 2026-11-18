@@ -17,12 +17,12 @@ import (
 )
 
 // Лазейка updates itself from its GitHub repository: the "release" branch
-// holds latest.json and the zipped exe. The download goes straight into
-// Лазейка's own folder (only administrators write there, Defender skips it),
-// is checked against the SHA-256 sums from latest.json, and the new exe
-// installs itself the usual way (main.go: it asks the running copy to quit,
-// puts itself in place and starts). A file Лазейка downloads itself carries
-// no "from the internet" mark, so SmartScreen does not stop it either.
+// holds latest.json and the zipped exe. The user starts an update from the
+// window or the tray; the download goes into Лазейка's own data folder (only
+// administrators write there), is checked against the SHA-256 sums from
+// latest.json, and the new exe installs itself the usual way (main.go: it
+// asks the running copy to quit, puts itself in place and starts) — the same
+// way any program updates itself.
 
 // SelfRepo is where updates come from.
 const SelfRepo = "brucewayner015-crypto/lazeyka"

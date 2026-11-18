@@ -177,7 +177,6 @@ func (a *App) Uninstall() {
 	a.opMu.Unlock()
 	a.endNetFix("удаление Лазейки")
 	RemoveSystemBits()
-	RemoveDefenderExclusion(a.P)
 	logx.Default().Close() // the log is in the folder that goes away
 	ScheduleDelete(a.P.Root, platform.UserUIDir())
 	a.Quit()

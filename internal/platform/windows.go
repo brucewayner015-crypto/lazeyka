@@ -1120,15 +1120,11 @@ func DefenderStatus(dir string) (DefenderState, error) {
 	return st, nil
 }
 
-// SetDefenderExclusion adds the folder to Defender's exclusions or removes it.
-func SetDefenderExclusion(dir string, on bool) error {
-	verb := "Add-MpPreference"
-	if !on {
-		verb = "Remove-MpPreference"
-	}
-	_, err := psPlain(30*time.Second, verb+" -ExclusionPath "+psQuote(filepath.Clean(dir))+" -ErrorAction Stop")
-	return err
-}
+// Лазейка only reads Defender's state (DefenderStatus) to show the user
+// whether its folder is excluded; it never changes Defender's settings. The
+// user adds the exclusion themselves if they want one — a program that
+// silently turns off its own antivirus checks is exactly what Defender treats
+// as a sign of malware, so doing it would make flags more likely, not fewer.
 
 // BlockedByAntivirus reports a write refused or undone by Defender & co
 // (ERROR_VIRUS_INFECTED, ERROR_VIRUS_DELETED).

@@ -131,11 +131,6 @@ func DefenderStatus(dir string) (DefenderState, error) {
 	return DefenderState{}, fmt.Errorf("not supported on %s", runtime.GOOS)
 }
 
-// SetDefenderExclusion: Windows only.
-func SetDefenderExclusion(dir string, on bool) error {
-	return fmt.Errorf("not supported on %s", runtime.GOOS)
-}
-
 // StartDetached starts a program that outlives us.
 func StartDetached(exe string, args ...string) error {
 	cmd := exec.Command(exe, args...)

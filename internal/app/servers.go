@@ -331,7 +331,6 @@ type AppPatch struct {
 	MixedPort      *int    `json:"mixed_port"`
 	TunStack       *string `json:"tun_stack"`
 	Onboarded      *bool   `json:"onboarded"`
-	ScanByDefender *bool   `json:"scan_by_defender"`
 }
 
 // UIPatch changes window preferences (nil = keep).
@@ -366,7 +365,7 @@ func (a *App) SetUI(p UIPatch) error {
 
 // SetApp applies app settings.
 func (a *App) SetApp(p AppPatch) error {
-	var autostartChanged, needApply, defenderChanged bool
+	var autostartChanged, needApply bool
 	var autostart bool
 	err := a.update(func(s *settings.Settings) error {
 		if p.Autostart != nil && *p.Autostart != s.App.Autostart {
@@ -396,16 +395,10 @@ func (a *App) SetApp(p AppPatch) error {
 		if p.Onboarded != nil {
 			s.App.Onboarded = *p.Onboarded
 		}
-		if p.ScanByDefender != nil && *p.ScanByDefender != s.App.ScanByDefender {
-			s.App.ScanByDefender, defenderChanged = *p.ScanByDefender, true
-		}
 		return nil
 	})
 	if err != nil {
 		return err
-	}
-	if defenderChanged {
-		go a.applyDefender()
 	}
 	logxSetDebug(a.Settings().App.Verbose)
 	if autostartChanged && platform.IsWindows && !a.Dev {
