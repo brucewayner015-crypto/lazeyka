@@ -1,0 +1,171 @@
+== Лазейка для Android 0.1.6: mihomo v1.19.34, ByeDPI v0.17.3, NDK /usr/local/lib/android/sdk/ndk/30.0.16248370
+/tmp/tmp.DAjTj4HGVN/mihomo-linux-arm64-v1.19.34.gz: OK
+mihomo: mihomo-linux-arm64-v1.19.34.gz -> android/app/src/main/jniLibs/arm64-v8a/libmihomo.so
+/tmp/tmp.DAjTj4HGVN/mihomo-linux-armv7-v1.19.34.gz: OK
+mihomo: mihomo-linux-armv7-v1.19.34.gz -> android/app/src/main/jniLibs/armeabi-v7a/libmihomo.so
+/tmp/tmp.DAjTj4HGVN/mihomo-linux-amd64-compatible-v1.19.34.gz: OK
+mihomo: mihomo-linux-amd64-compatible-v1.19.34.gz -> /tmp/tmp.DAjTj4HGVN/mihomo-host
+Mihomo Meta v1.19.34 linux amd64 with go1.26.11 Wed Nov 11 06:48:42 UTC 2026
+Use tags: with_gvisor
+Note: switching to '7efde1b1296eaaa187b70e951894dde17527489c'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
+ByeDPI -> android/app/src/main/jniLibs/arm64-v8a/libbyedpi.so
+ByeDPI -> android/app/src/main/jniLibs/armeabi-v7a/libbyedpi.so
+?   	lazeyka	[no test files]
+?   	lazeyka/cmd/svyazka	[no test files]
+ok  	lazeyka/internal/amnezia	0.005s
+ok  	lazeyka/internal/app	1.575s
+ok  	lazeyka/internal/byedpi	1.210s
+ok  	lazeyka/internal/core	0.080s
+ok  	lazeyka/internal/host	0.024s
+ok  	lazeyka/internal/idna	0.002s
+ok  	lazeyka/internal/importer	0.007s
+ok  	lazeyka/internal/logx	0.006s
+?   	lazeyka/internal/omap	[no test files]
+ok  	lazeyka/internal/platform	0.005s
+ok  	lazeyka/internal/settings	0.006s
+ok  	lazeyka/internal/svyazka	2.849s
+ok  	lazeyka/internal/update	0.003s
+?   	lazeyka/internal/web	[no test files]
+ok  	lazeyka/internal/zapret	0.006s
+sudo: preserving the entire environment is not supported, '-E' is ignored
+core: {"op": "ready", "args": {"url": "http://127.0.0.1:38971/?t=e66933e3b5a9a0bc09ac316f43110c25d8d87305cf41c5b6", "version": "0.1.6"}}
+core: {"op": "status", "args": {"mode": "off", "title": "Лазейка", "text": "VPN выключен", "vpn_on": false, "dpi_on": false}}
+core: {"op": "status", "args": {"mode": "off", "title": "Лазейка", "text": "VPN выключен", "vpn_on": false, "dpi_on": true}}
+core: {"op": "status", "args": {"mode": "off", "title": "Лазейка", "text": "Только обход DPI", "vpn_on": false, "dpi_on": true}}
+core: {"op": "status", "args": {"mode": "busy", "title": "Лазейка", "text": "Подключение…", "vpn_on": true, "dpi_on": true}}
+core: {"id": 1, "op": "tun_open", "args": {"session": "Лазейка", "mtu": 1500, "address4": "198.18.0.1/30", "address6": "fdfe:dcba:9876::1/126", "dns": "198.18.0.2", "bypass_apps": ["ru.sberbankmobile", "com.idamob.tinkoff.android", "ru.vtb24.mobilebanking.android", "ru.alfabank.mobile.android", "ru.gazprombank.android.mobilebank.app", "ru.raiffeisennews", "ru.nspk.mirpay", "ru.rostel", "ru.oneme.app"], "allow_bypass": false}}
+core: {"op": "status", "args": {"mode": "on", "title": "Лазейка", "text": "VPN включён", "vpn_on": true, "dpi_on": true}}
+mihomo 11412 fds: ['/dev/null', 'pipe:[21774]', 'pipe:[21774]', '/tmp/lz-e2e-j1lde053/data/mihomo/cache.db', 'anon_inode:[eventpoll]', 'anon_inode:[eventfd]', 'socket:[23559]', 'socket:[22605]', 'anon_inode:[eventfd]', 'socket:[20820]', 'socket:[21786]', 'socket:[22606]', 'socket:[23583]', 'socket:[21787]', 'socket:[22607]', 'socket:[23584]', 'socket:[20821]', 'socket:[21788]', 'socket:[22608]', 'socket:[20822]', 'socket:[23585]', 'socket:[20823]']
+core: {"op": "status", "args": {"mode": "busy", "title": "Лазейка", "text": "Подключение…", "vpn_on": true, "dpi_on": true}}
+core: {"id": 2, "op": "tun_open", "args": {"session": "Лазейка", "mtu": 1500, "address4": "198.18.0.1/30", "address6": "fdfe:dcba:9876::1/126", "dns": "198.18.0.2", "bypass_apps": ["ru.sberbankmobile", "com.idamob.tinkoff.android", "ru.vtb24.mobilebanking.android", "ru.alfabank.mobile.android", "ru.gazprombank.android.mobilebank.app", "ru.raiffeisennews", "ru.nspk.mirpay", "ru.rostel", "ru.oneme.app"], "allow_bypass": false}}
+core: {"op": "status", "args": {"mode": "on", "title": "Лазейка", "text": "VPN включён", "vpn_on": true, "dpi_on": true}}
+mihomo 11439 fds: ['/dev/null', 'pipe:[20853]', 'pipe:[20853]', '/dev/net/tun', '/tmp/lz-e2e-j1lde053/data/mihomo/cache.db', 'anon_inode:[eventpoll]', 'anon_inode:[eventfd]', 'socket:[22625]', 'socket:[22623]', 'anon_inode:[eventfd]', 'socket:[23586]', 'socket:[21791]', 'socket:[23587]', 'socket:[22627]', 'socket:[20858]', 'socket:[23588]', 'socket:[21792]', 'socket:[22628]', 'socket:[23589]', 'socket:[21793]', 'socket:[20859]', 'socket:[23590]', 'socket:[20860]', 'socket:[22653]', 'socket:[23602]', 'socket:[23591]', 'socket:[23603]', 'socket:[22654]', 'socket:[23604]', 'socket:[23592]', 'socket:[23605]', 'socket:[22634]', 'socket:[23606]', 'socket:[20867]', 'socket:[22652]', 'socket:[20868]', 'socket:[22636]', 'socket:[21800]', 'socket:[21806]', 'socket:[22655]', 'socket:[20869]', 'socket:[22649]', 'socket:[21807]', 'socket:[22639]', 'socket:[21813]', 'socket:[22641]', 'socket:[21810]', 'socket:[23618]', 'socket:[20876]', 'socket:[22644]', 'socket:[22646]', 'socket:[22658]', 'socket:[22659]', 'socket:[22648]', 'socket:[20878]', 'socket:[22663]', 'socket:[23611]', 'socket:[23613]', 'socket:[20874]']
+mihomo holds the TUN descriptor: True
+core: {"id": 3, "op": "tun_close"}
+---- lazeyka.log ----
+2026-11-18 17:19:10 [app] INFO  Лазейка 0.1.6 запущена (Android 15, админ: true)
+2026-11-18 17:19:10 [app] INFO  ByeDPI запущен: bd-1 (pid 11403)
+2026-11-18 17:19:10 [app] INFO  списки маршрутизации (ai, discord, discord-ip, geoblock, hodca, meta, meta-ip, ru-blocked, ru-domains, ru-ip, ru-outside, telegram, telegram-ip, twitter-ip, youtube): встроенная копия от 17.11.2026, свежие mihomo скачает сам
+2026-11-18 17:19:10 [app] INFO  mihomo запущен (pid 11412)
+2026-11-18 17:19:10 [mihomo] INFO  Start initial configuration in progress
+2026-11-18 17:19:10 [mihomo] INFO  Geodata Loader mode: memconservative
+2026-11-18 17:19:10 [mihomo] INFO  Geosite Matcher implementation: succinct
+2026-11-18 17:19:10 [mihomo] INFO  Initial configuration complete, total time: 0ms
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] meta not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] telegram not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] ru-outside not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] hodca not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] discord not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] telegram-ip not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] discord-ip not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] ru-blocked not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] meta-ip not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] twitter-ip not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] geoblock not updated for a long time, force refresh
+2026-11-18 17:19:10 [mihomo] WARN  [Provider] youtube not updated for a long time, force refresh
+2026-11-18 17:19:11 [app] WARN  VPN включён без серверов: работает только маршрутизация и обход DPI
+2026-11-18 17:19:11 [mihomo] WARN  Mihomo shutting down
+2026-11-18 17:19:11 [app] INFO  mihomo остановлен
+2026-11-18 17:19:11 [app] INFO  mihomo запущен (pid 11439)
+2026-11-18 17:19:11 [mihomo] INFO  Start initial configuration in progress
+2026-11-18 17:19:11 [mihomo] INFO  Geodata Loader mode: memconservative
+2026-11-18 17:19:11 [mihomo] INFO  Geosite Matcher implementation: succinct
+2026-11-18 17:19:11 [mihomo] INFO  Initial configuration complete, total time: 0ms
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] geoblock not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] hodca not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] ru-blocked not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] twitter-ip not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] discord not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] telegram-ip not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] youtube not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] discord-ip not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] ru-outside not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] meta not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] meta-ip not updated for a long time, force refresh
+2026-11-18 17:19:11 [mihomo] WARN  [Provider] telegram not updated for a long time, force refresh
+2026-11-18 17:19:11 [app] WARN  VPN включён без серверов: работает только маршрутизация и обход DPI
+2026-11-18 17:19:12 [mihomo] WARN  Mihomo shutting down
+2026-11-18 17:19:12 [app] INFO  mihomo остановлен
+2026-11-18 17:19:12 [app] INFO  ByeDPI остановлен
+2026-11-18 17:19:12 [app] INFO  Лазейка завершена
+
+E2E OK {'ready': True, 'vpn': True, 'dpi': True, 'tun_opened': 2, 'url': 'http://127.0.0.1:38971/?t=e66933e3b5a9a0bc09ac316f43110c25d8d87305cf41c5b6'}
+core: {"op": "ready", "args": {"url": "http://127.0.0.1:33987/?t=0d510a17a94bb4c14d2fba0e412d63b444aa12d3a4cbf652", "version": "0.1.6"}}
+core: {"op": "status", "args": {"mode": "off", "title": "Лазейка", "text": "VPN выключен", "vpn_on": false, "dpi_on": false}}
+core: {"op": "status", "args": {"mode": "busy", "title": "Лазейка", "text": "Подключение…", "vpn_on": true, "dpi_on": false}}
+core: {"id": 1, "op": "tun_open", "args": {"session": "Лазейка", "mtu": 1500, "address4": "198.18.0.1/30", "address6": "fdfe:dcba:9876::1/126", "dns": "198.18.0.2", "bypass_apps": ["ru.sberbankmobile", "com.idamob.tinkoff.android", "ru.vtb24.mobilebanking.android", "ru.alfabank.mobile.android", "ru.gazprombank.android.mobilebank.app", "ru.raiffeisennews", "ru.nspk.mirpay", "ru.rostel", "ru.oneme.app"], "allow_bypass": false}}
+core: {"op": "status", "args": {"mode": "on", "title": "Лазейка", "text": "VPN включён", "vpn_on": true, "dpi_on": false}}
+core: {"op": "status", "args": {"mode": "on", "title": "Лазейка", "text": "VPN включён", "vpn_on": true, "dpi_on": true}}
+mihomo 11478 fds: ['/dev/null', 'pipe:[20970]', 'pipe:[20970]', '/dev/net/tun', '/tmp/lz-e2e-qzy7ugi2/data/mihomo/cache.db', 'anon_inode:[eventpoll]', 'anon_inode:[eventfd]', 'socket:[22706]', 'socket:[20986]', 'socket:[22707]', 'socket:[21876]', 'anon_inode:[eventfd]', 'socket:[21882]', 'socket:[21003]', 'socket:[22713]', 'socket:[22716]', 'socket:[22731]', 'socket:[23687]', 'socket:[20995]', 'socket:[20996]', 'socket:[21885]', 'socket:[23693]', 'socket:[21004]', 'socket:[22717]', 'socket:[23696]', 'socket:[21886]', 'socket:[21895]', 'socket:[22714]', 'socket:[23694]', 'socket:[21005]', 'socket:[22715]', 'socket:[21887]', 'socket:[21006]', 'socket:[21009]', 'socket:[22720]', 'socket:[21010]', 'socket:[21011]', 'socket:[22724]', 'socket:[23700]', 'socket:[21012]', 'socket:[21013]', 'socket:[21900]', 'socket:[21903]']
+mihomo holds the TUN descriptor: True
+core: {"op": "status", "args": {"mode": "on", "title": "Лазейка", "text": "VPN включён", "vpn_on": true, "dpi_on": true}}
+core: {"op": "status", "args": {"mode": "busy", "title": "Лазейка", "text": "Подключение…", "vpn_on": true, "dpi_on": true}}
+core: {"id": 2, "op": "tun_open", "args": {"session": "Лазейка", "mtu": 1500, "address4": "198.18.0.1/30", "address6": "fdfe:dcba:9876::1/126", "dns": "198.18.0.2", "bypass_apps": ["ru.sberbankmobile", "com.idamob.tinkoff.android", "ru.vtb24.mobilebanking.android", "ru.alfabank.mobile.android", "ru.gazprombank.android.mobilebank.app", "ru.raiffeisennews", "ru.nspk.mirpay", "ru.rostel", "ru.oneme.app"], "allow_bypass": false}}
+core: {"op": "status", "args": {"mode": "on", "title": "Лазейка", "text": "VPN включён", "vpn_on": true, "dpi_on": true}}
+reach lines: ['2026-11-18 17:19:44 [app] INFO  серверы: отвечают 0 из 4; не ответили: недоступны из этой сети (адрес заблокирован или сервер выключен) — 1 («Refused» 127.0.0.1:38465); подключение есть, TLS обрывается (блокировка протокола) — 1 («Silent» 127.0.0.1:57203); доступны напрямую, но VPN через них не работает — 1 («TLS» 127.0.0.1:49149); по UDP, напрямую не проверить — 1 («HY» 127.0.0.1:443)']
+dead servers explained: True []
+BLOCKED servers: {'Refused': (False, 0, 'unreachable'), 'Silent': (False, 0, 'dpi'), 'TLS': (False, 0, 'open'), 'HY': (False, 0, 'udp')}
+picker shows the reasons: True
+core: {"id": 3, "op": "tun_close"}
+---- lazeyka.log ----
+2026-11-18 17:19:12 [app] INFO  Лазейка 0.1.6 запущена (Android 15, админ: true)
+2026-11-18 17:19:12 [app] INFO  списки маршрутизации (ai, discord, discord-ip, geoblock, hodca, meta, meta-ip, ru-blocked, ru-domains, ru-ip, ru-outside, telegram, telegram-ip, twitter-ip, youtube): встроенная копия от 17.11.2026, свежие mihomo скачает сам
+2026-11-18 17:19:12 [app] INFO  mihomo запущен (pid 11478)
+2026-11-18 17:19:12 [mihomo] INFO  Start initial configuration in progress
+2026-11-18 17:19:12 [mihomo] INFO  Geodata Loader mode: memconservative
+2026-11-18 17:19:12 [mihomo] INFO  Geosite Matcher implementation: succinct
+2026-11-18 17:19:12 [mihomo] INFO  Initial configuration complete, total time: 0ms
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] youtube not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] geoblock not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] discord not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] telegram-ip not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] meta-ip not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] ru-blocked not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] twitter-ip not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] discord-ip not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] ru-outside not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] meta not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] telegram not updated for a long time, force refresh
+2026-11-18 17:19:12 [mihomo] WARN  [Provider] hodca not updated for a long time, force refresh
+2026-11-18 17:19:12 [app] INFO  ByeDPI запущен: bd-1 (pid 11497)
+2026-11-18 17:19:13 [mihomo] WARN  Mihomo shutting down
+2026-11-18 17:19:13 [app] INFO  mihomo остановлен
+2026-11-18 17:19:13 [app] INFO  mihomo запущен (pid 11504)
+2026-11-18 17:19:13 [mihomo] INFO  Start initial configuration in progress
+2026-11-18 17:19:13 [mihomo] INFO  Geodata Loader mode: memconservative
+2026-11-18 17:19:13 [mihomo] INFO  Geosite Matcher implementation: succinct
+2026-11-18 17:19:13 [mihomo] INFO  Initial configuration complete, total time: 0ms
+2026-11-18 17:19:16 [app] INFO  DNS: www.youtube.com у DNS сети (8.8.8.8:53): 142.251.154.4; через TCP (1.1.1.1, 8.8.8.8, 9.9.9.9): 142.251.153.4
+2026-11-18 17:19:17 [app] INFO  проверка петли: TCP мимо VPN, UDP мимо VPN, DNS по UDP мимо VPN
+2026-11-18 17:19:18 [app] INFO  проверка петли: TCP мимо VPN, UDP мимо VPN, DNS по UDP мимо VPN
+2026-11-18 17:19:21 [app] INFO  zapret: стратегия bd-1 работает (9 из 9 проверок)
+2026-11-18 17:19:44 [app] INFO  серверы: отвечают 0 из 4; не ответили: недоступны из этой сети (адрес заблокирован или сервер выключен) — 1 («Refused» 127.0.0.1:38465); подключение есть, TLS обрывается (блокировка протокола) — 1 («Silent» 127.0.0.1:57203); доступны напрямую, но VPN через них не работает — 1 («TLS» 127.0.0.1:49149); по UDP, напрямую не проверить — 1 («HY» 127.0.0.1:443)
+2026-11-18 17:19:44 [mihomo] WARN  Mihomo shutting down
+2026-11-18 17:19:44 [app] INFO  mihomo остановлен
+2026-11-18 17:19:44 [app] INFO  ByeDPI остановлен
+2026-11-18 17:19:44 [app] INFO  Лазейка завершена
+
+E2E OK {'ready': True, 'vpn': True, 'dpi': True, 'tun_opened': 2, 'url': 'http://127.0.0.1:33987/?t=0d510a17a94bb4c14d2fba0e412d63b444aa12d3a4cbf652'}
+Note: /home/runner/work/lazeyka/lazeyka/android/app/src/main/java/ru/lazeyka/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+total 47296
+drwxr-xr-x 2 runner runner     4096 Nov 18 17:20 .
+drwxr-xr-x 3 runner runner     4096 Nov 18 17:20 ..
+-rw-r--r-- 1 runner runner 48415472 Nov 18 17:20 app-release-unsigned.apk
+-rw-r--r-- 1 runner runner      409 Nov 18 17:20 output-metadata.json
