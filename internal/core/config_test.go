@@ -442,3 +442,40 @@ func TestBuildAndroid(t *testing.T) {
 	}
 	mihomoCheck(t, b3)
 }
+
+// Since August 2026 Russian ISPs break DoH to Google/Cloudflare and answer
+// UDP DNS to 8.8.8.8/1.1.1.1 from НСДИ: such servers must not be in the lists.
+func TestDNSAvoidsTamperedResolvers(t *testing.T) {
+	for _, android := range []bool{false, true} {
+		s := sampleSettings(t)
+		rt := testRuntime()
+		if android {
+			rt.Android, rt.TunEnabled, rt.TunFD, rt.DPIPort = true, true, 3, 18081
+		}
+		b, err := Build(s, rt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var cfg struct {
+			DNS map[string]any `json:"dns"`
+		}
+		json.Unmarshal(b.Config, &cfg)
+		if cfg.DNS["respect-rules"] != false {
+			t.Error("respect-rules sends DNS to Cloudflare through DISCORD (discord-ip has 104.16.0.0/12)")
+		}
+		for _, key := range []string{"default-nameserver", "nameserver", "proxy-server-nameserver"} {
+			for _, v := range cfg.DNS[key].([]any) {
+				ns := v.(string)
+				direct := !strings.Contains(ns, "#")
+				switch {
+				case ns == "1.1.1.1" || ns == "8.8.8.8" || ns == "udp://1.1.1.1" || ns == "udp://8.8.8.8":
+					t.Errorf("%s: %s goes to НСДИ", key, ns)
+				case direct && (strings.Contains(ns, "dns.google") || strings.Contains(ns, "cloudflare-dns.com") || strings.HasPrefix(ns, "tls://") || strings.HasPrefix(ns, "https://")):
+					t.Errorf("%s: %s is blocked by DPI when direct", key, ns)
+				case strings.Contains(ns, "#") && !strings.HasPrefix(ns, "https://1.1.1.1/") && !strings.HasPrefix(ns, "https://8.8.8.8/"):
+					t.Errorf("%s: %s needs a bootstrap lookup", key, ns)
+				}
+			}
+		}
+	}
+}

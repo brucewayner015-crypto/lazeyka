@@ -55,7 +55,7 @@ build_byedpi "$TC/armv7a-linux-androideabi26-clang" "$JNI/armeabi-v7a/libbyedpi.
 
 # --- the core: tests (configs checked by the real mihomo), then the builds ----
 GOOS=windows GOARCH=amd64 go build -o /dev/null .  # the Windows build must not break
-MIHOMO_BIN="$WORK/mihomo-host" go test ./...
+MIHOMO_BIN="$WORK/mihomo-host" BYEDPI_BIN="$WORK/byedpi-host" go test ./...
 LDF="-s -w -X lazeyka/internal/app.Version=$V"
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags lzandroid -trimpath -ldflags "$LDF" -o "$JNI/arm64-v8a/liblazeyka.so" .
 CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=7 go build -tags lzandroid -trimpath -ldflags "$LDF" -o "$JNI/armeabi-v7a/liblazeyka.so" .

@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"lazeyka/internal/logx"
@@ -165,8 +166,21 @@ func (m *Mihomo) Stop() {
 		return
 	}
 	m.stopping = true
-	_ = cmd.Process.Kill()
+	// SIGTERM first: mihomo then closes its cache cleanly, and the fake
+	// addresses apps already hold keep working after a restart. Windows has
+	// no SIGTERM for other processes: Signal fails and we kill at once.
+	graceful := cmd.Process.Signal(syscall.SIGTERM) == nil
+	if !graceful {
+		_ = cmd.Process.Kill()
+	}
 	m.mu.Unlock()
+	if graceful {
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			_ = cmd.Process.Kill()
+		}
+	}
 	select {
 	case <-done:
 	case <-time.After(8 * time.Second):

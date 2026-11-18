@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"lazeyka/internal/byedpi"
 	"lazeyka/internal/core"
 	"lazeyka/internal/logx"
 	"lazeyka/internal/platform"
@@ -123,8 +124,11 @@ type App struct {
 	defender     DefenderView
 	defenderBusy bool
 	self         SelfUpdateView // the last check for a newer Лазейка
-	dpiPort      int            // Android: ByeDPI's SOCKS port
-	tunFile      *os.File       // Android: our copy of the VPN interface until mihomo has it
+	dpiPort      int            // Android: ByeDPI's own SOCKS port
+	frontPort    int            // Android: the front that resolves names for ByeDPI (mihomo's ByeDPI proxy)
+	front        *byedpi.Front
+	dpiMu        sync.Mutex // Android: ByeDPI restarts (strategy selection) without blocking the VPN
+	tunFile      *os.File   // Android: our copy of the VPN interface until mihomo has it
 
 	opMu          sync.Mutex // serialises connect/disconnect/zapret operations
 	mihomo        *core.Mihomo
@@ -250,6 +254,9 @@ func (a *App) Shutdown() {
 	}
 	a.endNetFix("")
 	a.zr.Stop()
+	if a.front != nil {
+		a.front.Close()
+	}
 	os.Remove(a.P.Instance)
 	logx.Infof("Лазейка завершена")
 	logx.Default().Close()

@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"sort"
@@ -57,6 +59,26 @@ func (a *App) initAndroid() {
 	if a.dpiPort == 0 {
 		a.dpiPort = 18081
 	}
+	// mihomo gives proxies the site's name; ByeDPI would ask the phone's DNS,
+	// which in Russia says YouTube does not exist. The front resolves names
+	// over TCP DNS and hands ByeDPI the address.
+	var lastFrontLog time.Time
+	a.front = &byedpi.Front{
+		Upstream: "127.0.0.1:" + strconv.Itoa(a.dpiPort),
+		Resolver: &byedpi.TCPResolver{},
+		OnError: func(host string, err error) {
+			if time.Since(lastFrontLog) > 10*time.Second { // not per connection
+				lastFrontLog = time.Now()
+				logx.Warnf("ByeDPI: %s: %v", host, err)
+			}
+		},
+	}
+	if p, err := a.front.Listen(0); err != nil {
+		logx.Errorf("ByeDPI: не удалось открыть порт: %v", err)
+	} else {
+		a.frontPort = p
+	}
+	go a.dnsReport()
 	_ = a.update(func(s *settings.Settings) error {
 		if !byedpi.IsKey(s.Zapret.Strategy) {
 			s.Zapret.Strategy = byedpi.Default
@@ -88,7 +110,7 @@ func (a *App) strategyList() ([]zapret.Strategy, error) {
 // through mihomo's direct port on Windows (zapret works on the packets).
 func (a *App) checkProxyURL() *url.URL {
 	if platform.IsAndroid {
-		return &url.URL{Scheme: "socks5", Host: "127.0.0.1:" + strconv.Itoa(a.dpiPort)}
+		return &url.URL{Scheme: "socks5", Host: "127.0.0.1:" + strconv.Itoa(a.frontPort)}
 	}
 	return a.directProxyURL()
 }
@@ -101,7 +123,15 @@ func dpiDirectTarget() string {
 	return "DIRECT"
 }
 
+// startByeDPILocked: the caller holds opMu (the zapret API).
 func (a *App) startByeDPILocked() error {
+	a.dpiMu.Lock()
+	defer a.dpiMu.Unlock()
+	return a.startByeDPIRunner()
+}
+
+// startByeDPIRunner: the caller holds dpiMu.
+func (a *App) startByeDPIRunner() error {
 	if !a.dpiInstalled() {
 		return errors.New("в приложении нет ByeDPI — переустановите Лазейку")
 	}
@@ -134,11 +164,14 @@ func (a *App) startByeDPILocked() error {
 }
 
 // runAutoSelectAndroid tries every ByeDPI strategy against YouTube and Discord.
+// It holds dpiMu, not opMu: the VPN can be switched and reconfigured
+// meanwhile, and YouTube/Discord go through the VPN until it is over.
 func (a *App) runAutoSelectAndroid() {
-	a.opMu.Lock()
-	defer a.opMu.Unlock()
+	a.dpiMu.Lock()
+	defer a.dpiMu.Unlock()
 	strategies := byedpi.Strategies
 	a.setZapret("starting", "")
+	a.syncZapretGroups(false)
 	checks := zapret.DefaultChecks()
 	proxy := a.checkProxyURL()
 	a.zr.Stop()
@@ -189,7 +222,7 @@ func (a *App) runAutoSelectAndroid() {
 	}
 	var restartErr error
 	if a.Settings().Zapret.Enabled {
-		restartErr = a.startByeDPILocked()
+		restartErr = a.startByeDPIRunner()
 		if restartErr != nil {
 			a.setZapret("error", restartErr.Error())
 		}
@@ -371,4 +404,49 @@ func dpiName() string {
 		return "обход DPI"
 	}
 	return "zapret"
+}
+
+// dnsReport writes one line about the network's DNS: in Russia it often says
+// YouTube does not exist, which is why Лазейка asks other servers over TCP.
+func (a *App) dnsReport() {
+	select {
+	case <-a.ctx.Done():
+		return
+	case <-time.After(4 * time.Second):
+	}
+	const name = "www.youtube.com"
+	ctx, cancel := context.WithTimeout(a.ctx, 12*time.Second)
+	defer cancel()
+	describe := func(ips []netip.Addr, err error) string {
+		switch {
+		case err != nil && strings.Contains(err.Error(), "no such host"):
+			return "«такого сайта нет» (подмена)"
+		case err != nil:
+			return "нет ответа"
+		case len(ips) == 0:
+			return "пустой ответ"
+		}
+		return ips[0].String()
+	}
+	var netDNS string
+	for _, s := range strings.Split(os.Getenv("LAZEYKA_DNS"), ",") {
+		if ip, err := netip.ParseAddr(strings.TrimSpace(s)); err == nil && ip.Is4() {
+			netDNS = net.JoinHostPort(ip.String(), "53")
+			break
+		}
+	}
+	sysLine := "неизвестен"
+	if netDNS != "" {
+		r := &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, "udp", netDNS)
+		}}
+		ips, err := r.LookupNetIP(ctx, "ip4", name)
+		sysLine = describe(ips, err)
+	}
+	tips, terr := (&byedpi.TCPResolver{}).LookupIPv4(ctx, name)
+	logx.Infof("DNS: %s у DNS сети (%s): %s; через TCP (1.1.1.1, 8.8.8.8, 9.9.9.9): %s", name, netDNS, sysLine, describe(tips, terr))
+	if terr != nil {
+		logx.Warnf("DNS через TCP не отвечает: без серверов YouTube и Discord не откроются (%v)", terr)
+	}
 }

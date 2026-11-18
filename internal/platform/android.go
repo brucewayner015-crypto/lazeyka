@@ -34,6 +34,9 @@ var (
 	dnsServers []string
 )
 
+// trustedTCP: see byedpi.TrustedDNS.
+var trustedTCP = []string{"1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53"}
+
 // SetDNS sets the resolvers the core itself uses (the phone's current
 // network DNS; Android has no /etc/resolv.conf for Go to read).
 func SetDNS(servers []string) {
@@ -51,7 +54,7 @@ func SetDNS(servers []string) {
 		}
 		out = append(out, s)
 	}
-	out = append(out, "77.88.8.8:53", "8.8.8.8:53")
+	out = append(out, "77.88.8.8:53", "77.88.8.1:53")
 	dnsMu.Lock()
 	dnsServers = out
 	dnsMu.Unlock()
@@ -62,11 +65,24 @@ func init() {
 	net.DefaultResolver = &net.Resolver{
 		PreferGo: true,
 		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			// DNS over TCP to resolvers abroad first: the operator's DNS
+			// and UDP to 8.8.8.8 / 1.1.1.1 (redirected to НСДИ) answer
+			// "no such domain" for blocked sites. Go picks the framing by
+			// the connection type, so a TCP connection is fine here.
+			var d net.Dialer
+			var last error
+			for _, s := range trustedTCP {
+				dctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				c, err := d.DialContext(dctx, "tcp", s)
+				cancel()
+				if err == nil {
+					return c, nil
+				}
+				last = err
+			}
 			dnsMu.Lock()
 			list := append([]string{}, dnsServers...)
 			dnsMu.Unlock()
-			var d net.Dialer
-			var last error
 			for _, s := range list {
 				dctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 				c, err := d.DialContext(dctx, network, s)

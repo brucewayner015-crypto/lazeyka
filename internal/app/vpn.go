@@ -90,8 +90,8 @@ func (a *App) connectLocked() error {
 	}
 	if platform.IsAndroid {
 		rt.Android, rt.TunFD, rt.TunName = true, 3, ""
-		if a.dpiInstalled() {
-			rt.DPIPort = a.dpiPort
+		if a.dpiInstalled() && a.frontPort > 0 {
+			rt.DPIPort = a.frontPort // mihomo talks to the front, the front to ByeDPI
 		}
 	}
 	if rt.APIPort == 0 || rt.DirectSocksPort == 0 {
@@ -181,25 +181,39 @@ func (a *App) Apply() error {
 	return a.Connect()
 }
 
-var reapplyMu sync.Mutex
-var reapplyPending bool
+var (
+	reapplyMu      sync.Mutex
+	reapplyRunning bool // a goroutine is (about to be) applying
+	reapplyDirty   bool // settings changed since it started
+)
 
-// ApplyAsync restarts mihomo in the background (coalesced).
+// ApplyAsync restarts mihomo in the background. Requests are coalesced: a
+// burst of changes (or ones made while a restart waits for the lock) leads
+// to one restart with the latest settings, not one per change — every
+// restart drops all connections and, on Android, rebuilds the VPN interface.
 func (a *App) ApplyAsync() {
 	reapplyMu.Lock()
-	if reapplyPending {
+	reapplyDirty = true
+	if reapplyRunning {
 		reapplyMu.Unlock()
 		return
 	}
-	reapplyPending = true
+	reapplyRunning = true
 	reapplyMu.Unlock()
 	go func() {
-		time.Sleep(400 * time.Millisecond)
-		reapplyMu.Lock()
-		reapplyPending = false
-		reapplyMu.Unlock()
-		if err := a.Apply(); err != nil {
-			logx.Errorf("применение настроек: %v", err)
+		for {
+			time.Sleep(400 * time.Millisecond)
+			reapplyMu.Lock()
+			if !reapplyDirty {
+				reapplyRunning = false
+				reapplyMu.Unlock()
+				return
+			}
+			reapplyDirty = false
+			reapplyMu.Unlock()
+			if err := a.Apply(); err != nil {
+				logx.Errorf("применение настроек: %v", err)
+			}
 		}
 	}()
 }

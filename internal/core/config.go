@@ -520,6 +520,11 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 		add("AND,((NETWORK,UDP),(DST-PORT,443),(OR,((RULE-SET,ru-blocked),(RULE-SET,geoblock),(RULE-SET,ai)))),REJECT")
 	}
 	add("RULE-SET,youtube," + GYouTube)
+	if rt.DPIPort > 0 && r.Discord == settings.ModeZapret {
+		// ByeDPI carries TCP only: Discord voice (UDP) goes through the VPN
+		add("AND,((NETWORK,UDP),(RULE-SET,discord))," + GVoice)
+		add("AND,((NETWORK,UDP),(RULE-SET,discord-ip))," + GVoice)
+	}
 	add("RULE-SET,discord," + GDiscord)
 	add("RULE-SET,discord-ip," + GDiscord + ",no-resolve")
 	for _, d := range []string{"whatsapp.com", "whatsapp.net", "whatsapp.biz", "wa.me"} {
@@ -545,9 +550,18 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 	add("MATCH," + GOther)
 
 	// --- DNS -----------------------------------------------------------------
-	nameservers := []string{"https://dns.google/dns-query", "https://cloudflare-dns.com/dns-query"}
+	// Since August 2026 the TSPU drops DoH/DoT to Google and Cloudflare (by
+	// SNI) and sends plain UDP DNS for 8.8.8.8 / 1.1.1.1 to the state
+	// resolver НСДИ, which says "no such domain" for YouTube, WhatsApp and
+	// the like. DNS over TCP to the same servers still gets real answers;
+	// through the VPN everything works. Resolvers that may lie are kept out
+	// of these lists: mihomo takes the first answer, a lie included.
+	nameservers := append([]string{}, TrustedDNS...)
 	if b.HasVPN {
-		nameservers = append(nameservers, "https://dns.google/dns-query#"+GAuto)
+		// by IP: no name to look up first, nothing a lying resolver can spoil
+		nameservers = append(nameservers,
+			"https://1.1.1.1/dns-query#"+GAuto,
+			"https://8.8.8.8/dns-query#"+GAuto)
 	}
 	dns := omap.New(
 		"enable", true,
@@ -556,11 +570,15 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 		"fake-ip-range", "198.18.0.1/16",
 		"fake-ip-filter-mode", "blacklist",
 		"fake-ip-filter", fakeIPFilter,
-		"respect-rules", true,
+		// each server says itself how it is reached (direct or #AUTO); with
+		// rules, DNS to Cloudflare matched discord-ip (104.16.0.0/12)
+		"respect-rules", false,
 		"use-hosts", true,
 		"use-system-hosts", true,
-		"default-nameserver", []string{"77.88.8.8", "1.1.1.1", "8.8.8.8"},
-		"proxy-server-nameserver", []string{"https://dns.google/dns-query", "https://cloudflare-dns.com/dns-query", "tls://1.1.1.1:853"},
+		// all servers above are IP addresses; this is only a safety net and
+		// must not be UDP to 8.8.8.8 / 1.1.1.1 (redirected to НСДИ)
+		"default-nameserver", append([]string{}, TrustedDNS...),
+		"proxy-server-nameserver", append([]string{}, TrustedDNS...),
 		"nameserver", nameservers,
 		"nameserver-policy", omap.New("rule-set:ru-domains,ru-outside", []string{"77.88.8.8", "77.88.8.1"}),
 	)
@@ -652,8 +670,10 @@ func Build(s *settings.Settings, rt Runtime) (*Built, error) {
 		omap.KV{K: "listeners", V: listeners},
 	)
 	if rt.DPIPort > 0 {
+		// TCP only: Discord voice goes through the VPN (VOICE), YouTube's
+		// QUIC is rejected so it falls back to TCP
 		cfg = append(cfg, omap.KV{K: "proxies", V: []any{omap.New(
-			"name", PByeDPI, "type", "socks5", "server", "127.0.0.1", "port", rt.DPIPort, "udp", true,
+			"name", PByeDPI, "type", "socks5", "server", "127.0.0.1", "port", rt.DPIPort, "udp", false,
 		)}})
 	}
 	if len(providers) > 0 {
@@ -782,3 +802,7 @@ func findProcess(rt Runtime) string {
 	}
 	return "strict"
 }
+
+// TrustedDNS: resolvers that still answer honestly from Russia (DNS over TCP;
+// see the DNS section of Build).
+var TrustedDNS = []string{"tcp://1.1.1.1", "tcp://8.8.8.8", "tcp://9.9.9.9"}

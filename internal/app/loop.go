@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"lazeyka/internal/logx"
@@ -62,6 +63,10 @@ func (m *loopMeter) reset(now time.Time, quiet time.Duration) {
 }
 
 func (a *App) onMihomoLine(level, msg string) {
+	if strings.Contains(msg, "provider sub-") && (strings.Contains(msg, "`<!doc") || strings.Contains(msg, "`<html") || strings.Contains(msg, "`<!DOC")) {
+		go a.subscriptionIsWebPage(msg)
+		return
+	}
 	if !strings.Contains(msg, "reject loopback connection") {
 		return
 	}
@@ -224,4 +229,33 @@ func (a *App) netDiag() string {
 		return ""
 	}
 	return "Сеть: " + strings.Join(parts, "; ") + "."
+}
+
+var webPageWarned sync.Map // provider name → struct{}
+
+// subscriptionIsWebPage: a subscription address answers with a web page —
+// usually the Связка panel's address pasted instead of its subscription link.
+func (a *App) subscriptionIsWebPage(msg string) {
+	i := strings.Index(msg, "sub-")
+	if i < 0 {
+		return
+	}
+	name := msg[i:]
+	if j := strings.IndexAny(name, " :"); j > 0 {
+		name = name[:j]
+	}
+	if _, dup := webPageWarned.LoadOrStore(name, struct{}{}); dup {
+		return
+	}
+	title := "подписка"
+	for _, sub := range a.Settings().Subscriptions {
+		if "sub-"+sub.ID == name {
+			title = "подписка «" + sub.Name + "»"
+		}
+	}
+	text := "По адресу открывается веб-страница, а не список серверов. Если это адрес панели Связки, скопируйте на панели ссылку для Лазейки и телефона и добавьте её вместо этой."
+	logx.Warnf("%s: %s", title, text)
+	if a.tray != nil {
+		a.tray.Notify("Лазейка: "+title+" не загрузилась", text, true)
+	}
 }
