@@ -1,3 +1,5 @@
+//go:build unix
+
 // Package host talks to the Android app that runs Лазейка's core: the app
 // owns what only Android code can do (the VPN interface from VpnService,
 // notifications, the list of installed apps) and the core asks for it over a
@@ -25,12 +27,6 @@ import (
 	"time"
 )
 
-// Event is something the app tells the core.
-type Event struct {
-	Name string          `json:"event"`
-	Data json.RawMessage `json:"data,omitempty"`
-}
-
 type reply struct {
 	ID    int64           `json:"id"`
 	OK    bool            `json:"ok"`
@@ -56,9 +52,6 @@ type Conn struct {
 	closed chan struct{}
 	err    error
 }
-
-// ErrNoHost: the core runs without the app (development).
-var ErrNoHost = errors.New("нет связи с приложением Android")
 
 // Dial connects to the app's socket. Names starting with "@" are in the
 // abstract namespace.
@@ -241,17 +234,6 @@ func (h *Conn) Tell(op string, args any) error {
 	return h.send(request{Op: op, Args: args})
 }
 
-// TunParams describe the VPN interface the app should create.
-type TunParams struct {
-	Session     string   `json:"session"`
-	MTU         int      `json:"mtu"`
-	Address4    string   `json:"address4"` // "198.18.0.1/30"
-	Address6    string   `json:"address6"` // captures IPv6 so it cannot leak past the VPN
-	DNS         string   `json:"dns"`
-	BypassApps  []string `json:"bypass_apps"` // package names that skip the VPN
-	AllowBypass bool     `json:"allow_bypass"`
-}
-
 // OpenTun asks the app for a VPN interface. The app may first have to ask
 // the user for the VPN permission, so the wait is long.
 func (h *Conn) OpenTun(p TunParams) (*os.File, error) {
@@ -272,24 +254,6 @@ func (h *Conn) OpenTun(p TunParams) (*os.File, error) {
 func (h *Conn) CloseTun() error {
 	_, _, err := h.Call("tun_close", nil, 15*time.Second)
 	return err
-}
-
-// Status is the line in the notification.
-type Status struct {
-	Mode   string `json:"mode"` // on | off | busy | err
-	Title  string `json:"title"`
-	Text   string `json:"text"`
-	VPNOn  bool   `json:"vpn_on"`
-	DPIOn  bool   `json:"dpi_on"`
-	Notify bool   `json:"notify,omitempty"` // a one-off message, not the status
-	Warn   bool   `json:"warn,omitempty"`
-}
-
-// AppInfo is an installed application.
-type AppInfo struct {
-	Package string `json:"package"`
-	Label   string `json:"label"`
-	System  bool   `json:"system"`
 }
 
 // Apps lists installed applications that use the network.
