@@ -294,7 +294,8 @@ function importBox(onAdded) {
     renderPreview(r);
   }
   function renderPreview(r) {
-    const items = r.items || [];
+    const premium = (r.items || []).filter(it => it.amnezia);
+    const items = (r.items || []).filter(it => !it.amnezia);
     const checks = items.map(() => h('input', { type: 'checkbox', checked: true }));
     const rows = items.map((it, i) => {
       const s = it.server, sub = it.subscription;
@@ -318,6 +319,7 @@ function importBox(onAdded) {
       },
     }, 'Добавить выбранное');
     put(out,
+      premium.map(it => amneziaPick(it, () => { ta.value = ''; filename = ''; put(out); onAdded && onAdded(); })),
       items.length ? h('div', { class: 'list preview', style: 'margin-top:12px' }, rows) : null,
       r.errors && r.errors.length ? h('ul', { class: 'errors' }, r.errors.map(e => h('li', {}, linkify(e)))) : null,
       items.length ? h('div', { class: 'row-actions', style: 'margin-top:12px' }, add) : null,
@@ -330,6 +332,79 @@ function importBox(onAdded) {
       h('button', { class: 'btn', onclick: () => pickFile((name, text) => { ta.value = text; filename = name; parse(); }) }, 'Открыть файл…'),
     ),
     out);
+}
+
+/* ---------- Amnezia Premium ---------------------------------------------------- */
+
+// The locations of a Premium key (by the key, or by the server it was added
+// with) as <option>s; the personal account is asked each time.
+async function amneziaOptions(sel, req, current) {
+  put(sel, h('option', { value: '' }, 'Загружаю локации…'));
+  sel.disabled = true;
+  try {
+    const r = await api('amnezia/locations', req);
+    put(sel, r.locations.map(l => h('option', { value: l.code, selected: l.code === current }, flagOf(l.code) + ' ' + l.name)));
+    sel.disabled = false;
+    return r.locations;
+  } catch (e) {
+    put(sel, h('option', { value: '' }, 'Не загрузились'));
+    toast(e.message, true);
+    return [];
+  }
+}
+
+function flagOf(code) {
+  const c = String(code || '').toUpperCase();
+  return /^[A-Z]{2}$/.test(c) ? String.fromCodePoint(...[...c].map(ch => 0x1F1E6 + ch.charCodeAt(0) - 65)) : '';
+}
+
+// A pasted Premium key: choose the location, Лазейка gets its file.
+function amneziaPick(it, done) {
+  const k = it.amnezia;
+  const sel = h('select', {});
+  const add = h('button', {
+    class: 'btn primary', onclick: async () => {
+      if (!sel.value) return;
+      add.disabled = true;
+      add.textContent = 'Получаю файл локации…';
+      try {
+        const r = await act(() => api('amnezia/add', { key: k, country: sel.value }));
+        toast('Добавлено: ' + r.name);
+        S.settings = await api('settings');
+        done();
+      } catch (e) {
+        add.disabled = false;
+        add.textContent = 'Добавить';
+      }
+    },
+  }, 'Добавить');
+  amneziaOptions(sel, { key: k.key });
+  return h('div', { class: 'panel amnezia', style: 'margin-top:12px' },
+    h('div', { class: 'item-name' }, k.name || 'Amnezia Premium'),
+    h('p', { class: 'hint' }, 'Лазейка возьмёт в личном кабинете Amnezia файл выбранной локации — это одно подключение из 7. Сменить локацию можно потом на вкладке «Серверы»: новый файл заменит старый.'),
+    h('div', { class: 'field' }, h('label', {}, 'Локация'), sel),
+    h('div', { class: 'row-actions', style: 'margin-top:10px' }, add));
+}
+
+// The location switch of an Amnezia server row.
+function amneziaSwitch(s) {
+  const btn = h('button', { class: 'btn mini', title: 'Другая локация Amnezia Premium: новый файл заменит этот' }, 'Сменить локацию');
+  btn.onclick = async () => {
+    const sel = h('select', { class: 'mini-select' });
+    btn.replaceWith(sel);
+    await amneziaOptions(sel, { id: s.id }, s.amnezia.country);
+    sel.onchange = async () => {
+      const code = sel.value;
+      if (!code || code === s.amnezia.country) return;
+      sel.disabled = true;
+      try {
+        const r = await act(() => api('amnezia/switch', { id: s.id, country: code }));
+        toast(r.note || ('Локация: ' + r.name), !!r.note);
+      } catch (e) { /* shown */ }
+      renderServers();
+    };
+  };
+  return btn;
 }
 
 /* ---------- home ------------------------------------------------------------- */
@@ -837,9 +912,12 @@ async function renderServers() {
       h('div', { class: 'prio', title: 'Приоритет' }, String(i + 1)),
       h('div', {},
         h('div', { class: 'item-name' }, s.name, nodes && nodes.active === (nv && nv.name) ? h('span', { class: 'item-meta' }, '  сейчас используется') : null),
-        h('div', { class: 'item-meta' }, s.info + ', ' + s.host + ':' + s.port + (s.source ? ', из: ' + s.source : ''))),
+        h('div', { class: 'item-meta' }, s.amnezia
+          ? 'Amnezia Premium, ' + (s.amnezia.country_name || s.amnezia.country.toUpperCase()) + ', ' + s.host + ':' + s.port
+          : s.info + ', ' + s.host + ':' + s.port + (s.source ? ', из: ' + s.source : ''))),
       h('div', { class: 'item-side' },
         nv ? delayEl(nv.delay, nv.alive, nv) : null,
+        s.amnezia ? amneziaSwitch(s) : null,
         h('button', { class: 'btn mini', title: 'Поднять приоритет', disabled: i === 0, onclick: () => patchServer({ id: s.id, move: -1 }) }, 'Выше'),
         h('button', { class: 'btn mini', title: 'Опустить приоритет', disabled: i === set.servers.length - 1, onclick: () => patchServer({ id: s.id, move: 1 }) }, 'Ниже'),
         h('button', { class: 'btn mini', onclick: () => patchServer({ id: s.id, enabled: !s.enabled }) }, s.enabled ? 'Отключить' : 'Включить'),

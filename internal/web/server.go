@@ -221,6 +221,55 @@ func (s *Server) routes(mux *http.ServeMux) {
 		}
 		writeJSON(w, map[string]int{"added": n})
 	})
+	// Amnezia Premium: a key, its locations, the chosen one
+	mux.HandleFunc("POST /api/amnezia/locations", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Key string `json:"key"`
+			ID  string `json:"id"`
+		}
+		if err := readJSON(r, &req); err != nil {
+			writeErr(w, err)
+			return
+		}
+		locs, err := a.AmneziaLocations(req.Key, req.ID)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"locations": locs})
+	})
+	mux.HandleFunc("POST /api/amnezia/add", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Key     importer.AmneziaKey `json:"key"`
+			Country string              `json:"country"`
+		}
+		if err := readJSON(r, &req); err != nil {
+			writeErr(w, err)
+			return
+		}
+		name, note, err := a.AmneziaAdd(req.Key, req.Country)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]string{"name": name, "note": note})
+	})
+	mux.HandleFunc("POST /api/amnezia/switch", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ID      string `json:"id"`
+			Country string `json:"country"`
+		}
+		if err := readJSON(r, &req); err != nil {
+			writeErr(w, err)
+			return
+		}
+		name, note, err := a.AmneziaSwitch(req.ID, req.Country)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]string{"name": name, "note": note})
+	})
 	mux.HandleFunc("POST /api/servers/patch", func(w http.ResponseWriter, r *http.Request) {
 		var p app.ServerPatch
 		if err := readJSON(r, &p); err != nil {

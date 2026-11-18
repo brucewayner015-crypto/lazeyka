@@ -18,7 +18,17 @@ import (
 type Item struct {
 	Server       *settings.Server       `json:"server,omitempty"`
 	Subscription *settings.Subscription `json:"subscription,omitempty"`
+	Amnezia      *AmneziaKey            `json:"amnezia,omitempty"` // a Premium key: a location is chosen in the app
 	Note         string                 `json:"note,omitempty"`
+}
+
+// AmneziaKey is an Amnezia Premium vpn:// key: no server inside, only the
+// login to the personal account, where the files of the locations are.
+type AmneziaKey struct {
+	Key         string `json:"key"` // the vpn:// text as given (secret)
+	Name        string `json:"name"`
+	Protocol    string `json:"protocol"`     // awg
+	UserCountry string `json:"user_country"` // the user's country the key was sold for
 }
 
 // Result of an import.
@@ -74,6 +84,11 @@ func Parse(text, filename string) Result {
 			data, err := DecodeAmneziaLink(line)
 			if err != nil {
 				res.Errors = append(res.Errors, err.Error())
+				continue
+			}
+			if k, ok := premiumKey(data, line); ok {
+				res.Items = append(res.Items, Item{Amnezia: &k,
+					Note: "ключ Amnezia Premium: Лазейка возьмёт в личном кабинете файл выбранной локации — одно подключение из 7"})
 				continue
 			}
 			sub := parseJSON(data, "")
@@ -155,6 +170,47 @@ func parseJSON(data []byte, base string) Result {
 		return Result{Errors: []string{amneziaServiceKey(probe)}}
 	}
 	return Result{Errors: []string{"неизвестный формат JSON: ожидается конфиг Xray или AmneziaVPN"}}
+}
+
+// premiumKey recognises an Amnezia Premium key (config_version with
+// api_config and auth_data, service "amnezia-premium").
+func premiumKey(data []byte, raw string) (AmneziaKey, bool) {
+	var v struct {
+		Name      string `json:"name"`
+		APIConfig struct {
+			ServiceType     string `json:"service_type"`
+			ServiceProtocol string `json:"service_protocol"`
+			UserCountryCode string `json:"user_country_code"`
+		} `json:"api_config"`
+		AuthData struct {
+			APIKey string `json:"api_key"`
+		} `json:"auth_data"`
+	}
+	if json.Unmarshal(data, &v) != nil || v.AuthData.APIKey == "" {
+		return AmneziaKey{}, false
+	}
+	service := strings.ToLower(v.APIConfig.ServiceType)
+	if !strings.Contains(service, "premium") {
+		return AmneziaKey{}, false
+	}
+	k := AmneziaKey{Key: strings.TrimSpace(raw), Name: v.Name, Protocol: strings.ToLower(v.APIConfig.ServiceProtocol), UserCountry: strings.ToLower(v.APIConfig.UserCountryCode)}
+	if k.Name == "" {
+		k.Name = "Amnezia Premium"
+	}
+	if k.Protocol == "" {
+		k.Protocol = "awg"
+	}
+	return k, true
+}
+
+// AWGServer makes a server of an AmneziaWG file (the Amnezia Premium
+// location files go this way).
+func AWGServer(conf, name, source string) (*settings.Server, error) {
+	proxy, info, err := ParseAWGConf(conf, name)
+	if err != nil {
+		return nil, err
+	}
+	return awgItem(proxy, info, name, source).Server, nil
 }
 
 // amneziaServiceKey explains a vpn:// key of the Amnezia Premium or Free

@@ -31,6 +31,16 @@ type Server struct {
 	Host    string         `json:"host,omitempty"`
 	Port    int            `json:"port,omitempty"`
 	Added   time.Time      `json:"added"`
+	Amnezia *AmneziaRef    `json:"amnezia,omitempty"` // a location file of Amnezia Premium
+}
+
+// AmneziaRef: the Amnezia Premium key a server's file came from and its
+// location, so that Лазейка can swap the file for another location.
+type AmneziaRef struct {
+	Key         string `json:"key"` // vpn:// (secret: the login to the personal account)
+	Country     string `json:"country"`
+	CountryName string `json:"country_name,omitempty"`
+	UserCountry string `json:"user_country,omitempty"`
 }
 
 // UDPFriendly reports whether the server carries UDP natively (good for calls).

@@ -484,3 +484,5 @@ body.android .brand { display: none; }
   .app-row { padding: 10px 12px; }
 }
 input[type="search"] { padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-small); background: #fff; }
+.mini-select { width: auto; max-width: 220px; padding: 3px 26px 3px 8px; font-size: 12.5px; min-height: 0; }
+.panel.amnezia .field { max-width: 420px; }

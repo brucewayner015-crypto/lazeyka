@@ -111,6 +111,7 @@ type ServerPatch struct {
 
 // PatchServer applies a change to one server.
 func (a *App) PatchServer(p ServerPatch) error {
+	var forget *settings.AmneziaRef
 	err := a.update(func(s *settings.Settings) error {
 		idx := -1
 		for i := range s.Servers {
@@ -122,6 +123,7 @@ func (a *App) PatchServer(p ServerPatch) error {
 			return errors.New("сервер не найден")
 		}
 		if p.Delete {
+			forget = s.Servers[idx].Amnezia
 			s.Servers = append(s.Servers[:idx], s.Servers[idx+1:]...)
 			return nil
 		}
@@ -145,6 +147,9 @@ func (a *App) PatchServer(p ServerPatch) error {
 	})
 	if err == nil {
 		a.afterServersChanged()
+		if forget != nil { // an Amnezia Premium location: free its slot
+			go a.amneziaForget(*forget)
+		}
 	}
 	return err
 }

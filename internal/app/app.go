@@ -27,7 +27,7 @@ import (
 )
 
 // Version of the app.
-var Version = "0.2.5"
+var Version = "0.2.6"
 
 // TunName is the TUN adapter name.
 const TunName = "Lazeyka"
