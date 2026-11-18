@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лазейка</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div class="shell">
+  <div class="side">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+        <rect x="5" y="4" width="5" height="24" rx="1.5"/>
+        <rect x="22" y="4" width="5" height="24" rx="1.5"/>
+        <path d="M2 23 C 10 23, 12 10, 30 9" class="brand-path"/>
+      </svg>
+      <span>Лазейка</span>
+    </div>
+    <section class="qp" id="qp" aria-label="Включение VPN и zapret"></section>
+    <nav class="side-nav" aria-label="Разделы">
+      <button class="nav" data-tab="home" aria-current="page">Маршрут</button>
+      <button class="nav" data-tab="servers">Серверы</button>
+      <button class="nav" data-tab="rules">Правила</button>
+      <button class="nav" data-tab="zapret">zapret</button>
+      <button class="nav" data-tab="settings">Настройки</button>
+      <button class="nav" data-tab="log">Журнал</button>
+    </nav>
+    <div class="side-foot" id="side-foot"></div>
+  </div>
+  <main id="main">
+    <div id="jobs" class="jobs" hidden></div>
+    <section id="tab-home" class="tab"></section>
+    <section id="tab-servers" class="tab" hidden></section>
+    <section id="tab-rules" class="tab" hidden></section>
+    <section id="tab-zapret" class="tab" hidden></section>
+    <section id="tab-settings" class="tab" hidden></section>
+    <section id="tab-log" class="tab" hidden></section>
+  </main>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+<input type="file" id="file-input" accept=".conf,.json,.txt,.yaml,.yml" hidden>
+<script src="app.js"></script>
+</body>
+</html>
