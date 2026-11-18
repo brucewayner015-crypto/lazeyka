@@ -1,0 +1,9 @@
+{
+  "version": "0.2.2",
+  "file": "Lazeyka-0.2.2.zip",
+  "size": 6884270,
+  "sha256": "f2cf0c12cdf1e3cc71815f66b9e8cc59a3d6b7a8a1e00b809f0953dcc7691db4",
+  "exe_sha256": "3392ada913b2af84ed150e3b931b6e9603a361ad5aac8304c6d7f61d6646a485",
+  "notes": "Лазейка теперь обновляется сама с GitHub и добавляет свою папку в исключения Защитника Windows.",
+  "published": "2026-11-18T07:03:06Z"
+}
