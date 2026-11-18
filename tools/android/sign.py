@@ -69,9 +69,55 @@ def chunk_digest(parts):
     return hashlib.sha256(b"\x5a" + struct.pack("<I", len(digests)) + b"".join(digests)).digest()
 
 
+def align(apk, alignment=4):
+    """zipalign: uncompressed entries start on a 4-byte boundary (Android 11+
+    refuses resources.arsc otherwise). The unsigned build is not aligned."""
+    eocd = find_eocd(apk)
+    n = struct.unpack_from("<H", apk, eocd + 10)[0]
+    cd_size, cd_off = struct.unpack_from("<II", apk, eocd + 12)
+    entries, p = [], cd_off
+    for _ in range(n):
+        if apk[p:p + 4] != b"PK\x01\x02":
+            raise SystemExit("broken central directory")
+        nlen, xlen, clen = struct.unpack_from("<HHH", apk, p + 28)
+        entries.append(p)
+        p += 46 + nlen + xlen + clen
+    cd = bytearray(apk[cd_off:cd_off + cd_size])
+    out = bytearray()
+    for e in sorted(entries, key=lambda e: struct.unpack_from("<I", apk, e + 42)[0]):
+        method, = struct.unpack_from("<H", apk, e + 10)
+        flags, = struct.unpack_from("<H", apk, e + 8)
+        csize, = struct.unpack_from("<I", apk, e + 20)
+        lho, = struct.unpack_from("<I", apk, e + 42)
+        if apk[lho:lho + 4] != b"PK\x03\x04":
+            raise SystemExit("broken local header")
+        nlen, xlen = struct.unpack_from("<HH", apk, lho + 26)
+        name = apk[lho + 30:lho + 30 + nlen]
+        extra = apk[lho + 30 + nlen:lho + 30 + nlen + xlen]
+        data_start = lho + 30 + nlen + xlen
+        data = apk[data_start:data_start + csize]
+        tail = b""
+        if flags & 8:  # data descriptor follows
+            q = data_start + csize
+            dlen = 16 if apk[q:q + 4] == b"PK\x07\x08" else 12
+            tail = apk[q:q + dlen]
+        new_off = len(out)
+        if method == 0:
+            extra = bytes(b for b in extra)  # keep, then pad
+            pad = (alignment - (new_off + 30 + nlen + len(extra)) % alignment) % alignment
+            extra += b"\0" * pad
+        hdr = bytearray(apk[lho:lho + 30])
+        struct.pack_into("<H", hdr, 28, len(extra))
+        out += hdr + name + extra + data + tail
+        struct.pack_into("<I", cd, e - cd_off + 42, new_off)
+    end = bytearray(apk[eocd:])
+    struct.pack_into("<I", end, 16, len(out))
+    return bytes(out + cd + end)
+
+
 def sign(keypath, src, dst):
     key, cert = load(keypath)
-    apk = open(src, "rb").read()
+    apk = align(open(src, "rb").read())
     eocd = find_eocd(apk)
     cd_size, cd_off = struct.unpack_from("<II", apk, eocd + 12)
     if cd_off + cd_size != eocd:
