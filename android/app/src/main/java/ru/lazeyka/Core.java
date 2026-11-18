@@ -131,6 +131,7 @@ public final class Core {
             env.put("LAZEYKA_DNS", dnsServers());
             env.put("LAZEYKA_AUTOSTART", autostart ? "1" : "0");
             env.put("SSL_CERT_DIR", "/system/etc/security/cacerts");
+            env.put("DISABLE_LOOPBACK_DETECTOR", "true"); // mihomo: no netlink for apps
             env.put("TZ", TimeZone.getDefault().getID());
             env.put("HOME", home.getAbsolutePath());
             env.put("TMPDIR", ctx.getCacheDir().getAbsolutePath());

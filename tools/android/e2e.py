@@ -108,6 +108,11 @@ def _mihomo_has_tun():
     try:
         links = [os.readlink(os.path.join(fds, f)) for f in os.listdir(fds)]
         print("mihomo", pids[-1], "fds:", links, flush=True)
+        env = open(os.path.join("/proc", pids[-1], "environ"), "rb").read().split(b"\0")
+        # Android forbids netlink to apps: mihomo's loop check would break all UDP
+        if b"DISABLE_LOOPBACK_DETECTOR=true" not in env:
+            print("mihomo runs without DISABLE_LOOPBACK_DETECTOR")
+            return False
         return "/dev/net/tun" in links
     except OSError:
         return False

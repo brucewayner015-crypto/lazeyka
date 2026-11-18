@@ -48,6 +48,11 @@ func (a *App) initAndroid() {
 	}
 	a.zr.Exe = byedpiExe()
 	a.zr.Label = "ByeDPI"
+	// mihomo's loop check lists network interfaces on every UDP connection,
+	// and Android forbids that to apps (netlink): every UDP dial failed with
+	// "route ip+net: netlinkrib: permission denied". A loop cannot happen
+	// here anyway: the app (and so mihomo) is always outside the VPN.
+	a.mihomo.Env = []string{"DISABLE_LOOPBACK_DETECTOR=true"}
 	a.dpiPort = freePort()
 	if a.dpiPort == 0 {
 		a.dpiPort = 18081
