@@ -194,8 +194,9 @@ func TestTCPResolver(t *testing.T) {
 	}
 }
 
-// With the real ByeDPI (BYEDPI_BIN): a fetch through the front works with
-// every built-in strategy.
+// With the real ByeDPI (BYEDPI_BIN): a fetch through the front works. Only
+// strategies without decoys: fakes with a short TTL and OOB bytes do reach a
+// server on the same machine (no hops to expire on) and garble the request.
 func TestFrontWithByeDPI(t *testing.T) {
 	bin := os.Getenv("BYEDPI_BIN")
 	if bin == "" {
@@ -205,6 +206,9 @@ func TestFrontWithByeDPI(t *testing.T) {
 	defer web.Close()
 	_, port, _ := net.SplitHostPort(strings.TrimPrefix(web.URL, "http://"))
 	for i, s := range Strategies {
+		if strings.Contains(s.Args, "-f") || strings.Contains(s.Args, "-o") || strings.Contains(s.Args, "-q") {
+			continue
+		}
 		bp := 23000 + i
 		args, _ := Args(s.Key, bp)
 		cmd := exec.Command(bin, args...)
