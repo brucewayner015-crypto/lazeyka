@@ -238,8 +238,12 @@ if ok and REACH:
             pump(time.time() + 120, lambda: not os.path.exists(os.environ["E2E_HOLD"]))
 if ok:
     send({"event": "quit"})
+    # pump stops at the socket's EOF, which comes a moment before the
+    # process can be reaped: wait for the process itself
     pump(time.time() + 30, lambda: core.poll() is not None)
-    if core.poll() is None:
+    try:
+        core.wait(timeout=30)
+    except subprocess.TimeoutExpired:
         print("core did not quit")
         ok = False
 if core.poll() is None:

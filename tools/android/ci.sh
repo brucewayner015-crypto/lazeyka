@@ -64,7 +64,7 @@ CGO_ENABLED=0 go build -tags lzandroid -trimpath -ldflags "$LDF" -o "$WORK/lazey
 # --- end to end on the runner: a real TUN descriptor, the real mihomo ---------
 sudo -E python3 tools/android/e2e.py "$WORK/lazeyka-host" "$WORK/mihomo-host" "$WORK/byedpi-host"
 # servers that fail the check: the picker must show them, with the reason
-E2E_REACH=1 sudo -E python3 tools/android/e2e.py "$WORK/lazeyka-host" "$WORK/mihomo-host" "$WORK/byedpi-host"
+sudo env E2E_REACH=1 python3 tools/android/e2e.py "$WORK/lazeyka-host" "$WORK/mihomo-host" "$WORK/byedpi-host"
 
 # --- the APK ------------------------------------------------------------------
 gradle -p android --no-daemon -q assembleRelease -PlzVersion="$V"
